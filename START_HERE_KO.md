@@ -1,0 +1,73 @@
+# WB-KDIs Training : SOE Fiscal Risk — 2026-10-28 교육용 수정본
+
+자세한 내용은 `docs/CHANGES-2026-10-28-WB-KDIs-training.md`에 있습니다. 모델 공식·기본값은 바꾸지 않았고, `tests/`의 검사(신규 `check_training_data.py` 포함)가 모두 통과합니다.
+
+- **제목 변경**: 브라우저 탭, 화면 상단, Streamlit 페이지 제목이 모두 **WB-KDIs Training : SOE Fiscal Risk**입니다(`config.REPORT_TITLE`).
+- **교육용 데이터셋(8개 SOE × 2015–2024, 10개년)**: `training_data.py`가 만듭니다. 표준 스키마의 모든 열(Country 제외)을 채웠습니다. 현금·매출채권·단기/장기 차입·외화/정부보증 부채, 매출원가·기타영업비용(Cost recovery), 연료비·인건비, 현금흐름, 정부지원(요금보전·운영보조·투자보조·자본투입·재대출·보증·세제지원), 정부 미지급금, VAT 환급채권, 노출 비율 5개, 출처 열 5개. 자본·EBITDA·EBIT가 모든 연도에서 양수라 KPI가 n/a로 빠지는 칸이 없고, 모든 SOE에 요금보전액이 있어 지원금 그래프가 어느 SOE를 골라도 그려집니다. 최신연도 기준 부실 3·회색 3·안전 2개이며, SOE A·C는 2020년에 회색 → 부실로, SOE F는 안전 → 회색으로 이동합니다. 모든 숫자는 교육용으로 만든 가상 데이터입니다.
+- **첫 화면에서 예시 데이터 다운로드**: Home › Load data의 업로드 상자 바로 아래 **Practice file: WB-KDIs training data** 줄에서 **⬇ Excel (.xlsx)**, **⬇ CSV**를 받을 수 있습니다. 받은 파일을 같은 화면에 그대로 업로드하면 내장 데이터와 똑같은 화면이 나옵니다(브라우저에서 탭별로 비교해 확인). Excel에는 Readme·Data·Grants_detail·Source_lines·Validation·Definitions 시트가 있어 Technical notes의 근거 패널까지 채워지고, CSV는 Data 시트만 담습니다. 같은 파일이 `sample_data/` 폴더에도 있습니다.
+- 화면은 이 교육용 데이터로 열리며, Example·Demo portfolio·Long panel도 그대로 고를 수 있습니다.
+
+---
+
+# SOE Fiscal Risk Tool — 2026-10-27 수정본
+
+자세한 내용은 `docs/CHANGES-2026-10-27.md`에 있습니다. 모델 공식·기본값은 바꾸지 않았고, `tests/`의 14개 검사가 모두 통과합니다.
+
+- **첫 화면(Home) 새로 구성**: 위에서부터 ① 제목 "About this tool..."(왼쪽 정렬)와 툴 설명, 다루지 않는 것(예산 전망, 국영은행 등 금융 SOE) 한 줄 ② **What the tool calculates**: 건전성 지표 → **부실 점수(Altman Z″-EM)** → 기대재정비용 → 충격·경보 4단계. Altman 단계에서 점수가 무엇인지, 3개 구간(Distress ≤ 1.1, Grey 1.1–2.6, Safe > 2.6), 공식(펼치기)을 보여 줍니다 ③ **Load data**: 기존 업로드 영역(설명 문구 포함)을 하늘색 점선 상자로, 그 아래 Required and optional columns · Data preview 접기, 그 아래 Now showing / 내장 데이터 / 템플릿을 간략하게 ④ **What the tool finds in this data**: 질문 카드 4개와 현재 데이터의 지표(누르면 해당 탭으로 이동). 기존 Home의 나머지 내용은 **About the tool and your data** 화면(`#view-about`)에 그대로 있습니다.
+- **GDP 자동 입력**: World Bank 시리즈(현지통화 LCU `NY.GDP.MKTP.CN` / 미국 달러 `NY.GDP.MKTP.CD`)를 고르고 국가·연도를 선택하면 GDP가 자동으로 채워지고 바로 모델에 반영됩니다. 그다음 단위(Billions·Millions 등)를 고르면 표시만 바뀝니다. 재무제표와 통화가 다르면 채워만 두고 "Use it anyway"를 체크해야 반영됩니다. 데이터에 `Country` 열이 있으면 국가도 자동 선택됩니다. 세네갈이 항상 "Currency mismatch"로 나오던 버그도 고쳤습니다.
+- **Expected Fiscal Cost 배치**: 왼쪽 Settings, 오른쪽에 막대그래프 두 개(EFC by SOE · Government backstop sensitivity)를 한 행에, 그 아래 LGD calibration, 맨 아래 EFC results.
+- **Shock Scenarios 배치**: Distress score path · Expected fiscal cost path 행을 "what moved it" 그래프 두 개보다 위로 올렸습니다.
+- **첫 화면 2단 배치**: Load data(왼쪽)와 What the tool finds in this data(오른쪽, 카드 2×2)를 한 행에 놓고 여백을 줄였습니다. 화면 폭 1000px 미만에서는 위아래로 쌓입니다. Data preview·Column mapping 표를 펼치면 오른쪽 카드 위로 넘치던 문제를 고쳐, 표가 왼쪽 칸 안에서 가로로 스크롤됩니다.
+- **첫 화면 소개글**: 제목 아래 두 줄 설명을 팀이 준 소개글("Governments often learn about the fiscal cost…")로 바꿨습니다. 문장은 그대로 두고 한 문단으로 보여 줍니다.
+- **업로드 상자를 첫 화면에**: 소개글 뒷부분(충격·한계)은 "…as a share of GDP." 바로 옆의 연한 회색 **more...**를 누르면 같은 문단 안에서 이어서 보입니다(펼치면 **less**). 소개글을 가로로 넓게 펴고 제목을 한 줄로 줄였으며, **What the tool calculates**는 Load data 행 아래로 옮겼습니다. 1366×768, 1440×900, 1920×1080 화면에서 스크롤 없이 업로드 상자가 보입니다.
+- **Shock Scenarios 보기 이름**: "Range of outcomes" → **"Monte Carlo simulation"**. 계산은 바뀌지 않았습니다.
+
+---
+
+# SOE Fiscal Risk Tool — 2026-10-26 회의 반영본
+
+자세한 변경 내역(회의 결정 → 변경 사항 대응표, 미완료 항목)은 `docs/CHANGES-meeting-2026-10-26.md`에 있습니다.
+
+## 이번 반영본에서 달라진 점
+- **탭 순서**: Home · How it works · KPI Dashboard · Distress Indicator · Expected Fiscal Cost · Shock Scenarios · Early Warning · Report(마지막). Government Support와 Assumptions(→ "Technical notes")는 탭 바에서 숨겼지만 삭제하지 않았습니다(링크 또는 `#view-gre`, `#view-assumptions`로 열림).
+- **How it works (신규)**: 비전문가용 설명 화면. 기존 "How SOE Pilot Works" 설명서와 같은 디자인(지하철 노선 모양 진행 바, 스크롤하면 왼쪽 그림이 단계마다 다시 그려지는 효과)으로 만들었고, 숫자는 모두 툴에 올린 데이터로 실시간 계산됩니다. 11개 챕터: ① 왜 중요한가 ② **웹사이트 한눈에 보기**(7개 탭이 각각 어떤 질문에 답하는지, 어떤 순서로 쓰는지) ③ 재무제표 7개 숫자 ④ 건전성 지표 4개 ⑤ 부실 점수와 3개 구간(직접 움직여 보는 슬라이더 포함) ⑥ 등급과 부실 확률 ⑦ 기대 재정비용 ⑧ **충격이 전달되는 경로**(충격을 고르면 계정 지도에 단계별로 불이 들어옴) ⑨ 몬테카를로 ⑩ 포트폴리오 충격 순위와 모델 검증 ⑪ 조기경보와 보고서. 마지막에 탭별 "무엇을 설정하고 무엇은 기본값으로 둘지" 지도, 용어집. 다른 모든 탭 제목 아래에 "New to this tab? How to read it →" 링크가 있어 해당 설명으로 바로 갑니다.
+- **Shock Scenarios 개편**: ① SOE와 기준연도 ② PD × EAD × LGD 설정(맨 위) ③ 충격: No shock / Standard stress / Custom shock(드롭다운으로 연료·환율·금리·매출·체납 중 하나 선택, 충격 크기 먼저 → 구조 요인) ④ 시간 범위(모든 충격 공통) ⑤ 고급 설정(접힘). 결과는 "충격 전달" 요약, 워터폴(브리지) 차트 2개, 경로 그래프 중심이고 표는 접어 두었습니다.
+- **"All SOEs" 화면 삭제 → 두 화면으로 대체**: Portfolio macro shock(모든 SOE에 같은 매출 감소·금리 상승, 몬테카를로, 재정비용을 가장 많이 늘리는 SOE 순위)과 Model check(과거 연도에서 출발해 충격을 준 예측 경로와 실제 재무제표 점수를 비교하는 in-sample 검증).
+- **버그 수정**: 체납(arrears) 충격이 크면 총자산이 음수가 되어 Distress → Safe로 튀던 문제. 상각액을 남은 비현금 유동자산 이내로 제한(Python·JS 동일). 신규 테스트 `tests/check_arrears_cap.py`.
+- **Early Warning**: 트리거를 이슈별(전반 건전성, 지급능력·부채, 유동성, 스트레스 테스트, 추세, 재정 의존도)로 묶고 필터 추가, 트리거별 구체적 후속 조치, SOE별 Action plan(이전/다음). 신규 규칙: 이자보상배율 < 1, 유동비율 < 1.
+- **Home**: 툴 설명 확대, 사용 순서 7단계, 적용 범위(비금융 SOE만, 한 국가·여러 SOE, 금융 SOE 제외 이유), 툴킷 4개 모듈(Early Warning Framework & Monitoring / Hidden Subsidies / Energy / PSO는 마지막).
+
+## 아직 하지 않은 것
+충격 크기의 과거 기준값(3–5년 중앙값·최소·최대), PDF 재무제표 자동 추출, 트리거 조치의 거버넌스팀 검증, PSO·금융 SOE 프레임워크.
+
+---
+
+# SOE Fiscal Risk Tool — 최종 통합본
+
+최종 통합 기준: `the earlier Full Logistic / EFC Only model` 및 `SOE-main_waterfall_v2_final(2).zip`.
+
+## 선택한 방식
+- 화면은 기존의 Home, Report, KPI Dashboard, Distress Indicator, Expected Fiscal Cost, Shock Scenarios, Government Support, Early Warning, Assumptions를 유지합니다.
+- **Monte Carlo = Rating-anchored PD(기본, AAA 하한 + D 아래 logistic tail) + 단일 Logistic(민감도 비교) + EFC only**. 각 경로/연도의 Z-EM에 대해 20개 등급 PD를 정확히 지나는 단조 곡선(logit-PCHIP)으로 PD를 계산하며, 4.9 이상에서는 0.02%로 하한 고정하고, Z-EM -1.5(D 임계값) 아래에서는 40%에서 출발해 기울기 b(`pd_logit_b`)의 logistic tail을 따라 PD가 계속 상승합니다(Z-EM -3에서 약 72%, -7에서 약 99%). 결정론적 탭은 기존 등급별 PD를 그대로 씁니다.
+- 민감도용 단일 Logistic: `PD = 1 / (1 + exp(-(a+b Z)))`, a = -2.02276962, b = -0.89133626 (상한 없는 minimax 적합, 최대 오차 6.50%p). 기존 Rating PD에 맞추어 추정했으나 실제 부도 이력으로 검증한 것은 아닙니다. 상한을 둔 이전 적합(a = -2.18031828, b = -1.10613960)은 `python scripts/calibrate_pd.py --refit --caps`로 재현할 수 있습니다.
+- EFC = PD × EAD × LGD. 실제 부도 사건 및 실현 손실은 추첨하지 않습니다. 채무상환 미이행만으로 MC PD를 100%로 덮어쓰지 않습니다.
+- 일반 Single Scenario의 PD 방식은 기존처럼 Rating 중심으로 유지합니다. UI에 선택창이 노출되지만 Monte Carlo 화면에서는 숨겨 혼동을 줄입니다.
+- 기존 Rating PD·Rating-anchored(기본)·단일 Logistic(민감도) 비교표 및 곡선은 **Shock Scenarios > Distribution (Monte Carlo) > Rating PD comparison and calibration details**에서 열어 볼 수 있습니다.
+- 현금흐름에서 채무상환이 지연되어도 단일 시나리오에서 곧바로 '부도'로 처리하지 않는 것이 기본값입니다. 단일 시나리오 민감도 분석용 'Treat missed debt service as default' 옵션은 유지했습니다.
+
+## 실행 방법
+1. **바로 사용:** ZIP 내부의 `SOE-Fiscal-Risk-Final.html`을 더블 클릭하여 Chrome/Edge 등에서 엽니다. 입력 데이터 없이도 샘플 포트폴리오가 나타납니다.
+2. **직접 데이터 사용:** 화면 상단의 **Upload data**로 기존 업로드 양식의 CSV/Excel을 선택합니다. ZIP 내 데이터는 실제 SENELEC 공식 재무자료가 아니라 예시용입니다.
+3. **Streamlit:** 의존성 설치 후 프로젝트 폴더에서 `streamlit run Home.py`를 실행합니다.
+4. **HTML 재생성:** 프로젝트 폴더에서 `python report.py --training --allow-download --out SOE-Fiscal-Risk-Final.html`(배포본) 또는 `python report.py --demo --out my_tool.html`을 실행합니다.
+
+## 검증
+- Python 및 JavaScript 문법 검사: 통과.
+- Waterfall v2 회귀 검사: 14,228개 통과 (기본값 변경으로 이전의 '자동 부도' 테스트는 옵션을 명시하도록 수정함).
+- Fuel path / cash-first 검사: 19,346개 통과.
+- Python 및 JavaScript 핵심 MC 계산: 기본(Rating-anchored)과 Logistic 민감도 각각에서 PD 및 EFC 관계 확인, 실현 부도 칼럼 없음.
+- Chromium 브라우저 smoke test: 화면 탐색, Monte Carlo 실행, PD 그래프, CSV 버튼, JS 오류 확인 통과.
+- 전체 대규모 JS/Python parity 테스트는 실행 시간 제한으로 완료하지 못했으며, 모든 시나리오/브라우저에 대한 완전한 검증으로 해석해서는 안 됩니다.
+
+## 참고
+샘플 데이터가 표시하는 금액과 PD는 시연용이며 SENELEC 실측치가 아닙니다. 등급 PD 20개 자체가 예시용 표이며(CCC+와 CCC는 PD가 같아 그 사이 구간은 평평함), 단일 Logistic 민감도는 CCC+ 등 일부 등급에서 최대 6.50%p 오차가 있으므로 보정의 타당성을 추가로 검토하기 전에는 실증적으로 검증된 PD로 인용하지 않는 것이 좋습니다.
