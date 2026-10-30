@@ -232,7 +232,9 @@
   }
   // Wrap original render methods rather than replacing the existing dashboards.
   // A change in SOE/period or the GRE selection updates only the add-on card.
-  [ ["about", showSupportHome], ["kpi", showSupportKPI], ["gre", showSupportGRE],
+  // KPI Dashboard: the "Reported vs tariff-compensation-adjusted EBIT margin" chart is hidden for now (meeting
+  // 2026-10-30: nothing done yet on PSO / compensation); showSupportKPI is kept so it can be switched back on.
+  [ ["about", showSupportHome], ["gre", showSupportGRE],
     ["assumptions", showSupportAssumptions], ["shock", showSupportShock] ].forEach(([tab, extra]) => {
     const original = pages[tab].render;
     pages[tab].render = function (...args) {

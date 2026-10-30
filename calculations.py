@@ -104,7 +104,8 @@ def compute_kpis(df: pd.DataFrame) -> pd.DataFrame:
 def available_kpis(df: pd.DataFrame, category=None):
     """Which KPIs have all required raw columns present and non-null
     somewhere in df. Pass a category key to filter, or omit for all."""
-    keys = config.KPI_CATEGORIES[category] if category else list(config.KPI_THRESHOLDS.keys())
+    # without a category: every KPI on the menu (the four categories), so alert counts match what is shown
+    keys = config.KPI_CATEGORIES[category] if category else [k for c in config.CATEGORY_ORDER for k in config.KPI_CATEGORIES[c]]
     available = []
     for key in keys:
         spec = config.KPI_THRESHOLDS[key]

@@ -25,7 +25,7 @@
     arrears: { p: ["ca"], s: ["eq", "X1", "X2", "X4", "z", "pd", "efc"] },
     standard: { p: ["rev", "cost", "int", "ca", "debt"], s: ["ebit", "ni", "gap", "eq", "X1", "X2", "X3", "X4", "z", "pd", "efc"] },
   };
-  const HOW_STD = { id: "standard", label: "Standard stress (all at once)", what: "All six DSA/DSF stress-test shocks at once: fuel, currency, interest rates, refinancing, revenue and arrears.",
+  const HOW_STD = { id: "standard", label: "Standard stress (all at once)", what: "All six standard stress-test shocks at once: fuel, currency, interest rates, refinancing, revenue and arrears.",
     who: "Every SOE, through its own exposures.", direction: "The usual first stress test.",
     path: ["Each shock hits its own line of the accounts.", "The losses add up and are borrowed.", "Extra debt brings extra interest, which the other shocks then build on.", "The health checks weaken and the distress score falls.", "The chance of distress and the expected fiscal cost rise, often by more than the shocks one at a time."],
     results: "", data: "", guide: {} };
@@ -239,9 +239,8 @@
     ["kpi", "KPI Dashboard", "Is each SOE healthy, and why not?"],
     ["altman", "Distress Indicator", "How close is each SOE to distress?"],
     ["efc", "Expected Fiscal Cost", "What could each SOE cost the budget?"],
-    ["shock", "Shock Scenarios", "What could make it worse?"],
     ["warning", "Early Warning", "What should happen next?"],
-    ["report", "Report", "How do I brief on it?"],
+    ["shock", "Shock Scenarios", "What could make it worse?"],
   ];
   const HW_KPIS = [["operating_margin", "Margin"], ["current_ratio", "Liquidity"], ["liabilities_to_assets", "Leverage"], ["interest_coverage", "Interest cover"]];
   const hwOpen = (id, label) => el("button", { class: "hw-open", type: "button", onclick: () => { showTab(id); window.scrollTo({ top: 0 }); } }, label || "Open this tab →");
@@ -298,7 +297,7 @@
 
   /* 2 · the tool at a glance: the website, tab by tab */
   HW_CHAPTERS.push({
-    id: "tool", rail: "The tool at a glance", title: "The website in one picture: seven stops, one question each",
+    id: "tool", rail: "The tool at a glance", title: "The website in one picture: six stops, one question each",
     steps: (c) => {
       const ew = c.ew(), lv = (x) => c.rows.filter((q) => ew.by[q.Entity].level === x).length;
       const reds = c.rows.reduce((a, q) => a + HW_KPIS.filter(([kk]) => ok(q[kk]) && E.classify(q[kk], kk)[1] === "red").length, 0);
@@ -309,10 +308,9 @@
         ["kpi", [hwB("2 · KPI Dashboard: is each SOE healthy? "), "Familiar ratios in four groups (profitability, liquidity, solvency, dependence on the government), each coloured green, amber or red. Use it to see ", el("i", {}, "why"), ` an SOE looks weak. On the four ratios shown here there are ${reds} red signals across ${pl(c.n, "SOE")}.`, el("br"), hwOpen("kpi")]],
         ["altman", [hwB("3 · Distress Indicator: one score per SOE. "), `Four health checks combine into a distress score that falls in a safe, grey or distress zone (chapters 4 to 6 show how). Today: ${c.zc.Distress} in distress, ${c.zc.Grey} grey, ${c.zc.Safe} safe.`, el("br"), hwOpen("altman")]],
         ["efc", [hwB("4 · Expected Fiscal Cost: what could it cost the budget? "), `Chance of distress × debt at stake × the share the government bears (chapter 7). This is the only tab that adds SOEs up: ${money(tot, true)} in total, ${pct(tot ? sum(efcs.slice(0, 3)) / tot : NaN, 0)} of it from the three largest.`, el("br"), hwOpen("efc")]],
-        ["shock", [hwB("5 · Shock Scenarios: what could make it worse? "), "Pick an SOE and a shock (fuel, exchange rate, interest rates, revenue, arrears) and compare with its no-shock path. Four views: one SOE; a Monte Carlo simulation of the range of outcomes; a portfolio-wide shock that ranks SOEs; and a check of the model against past years (chapters 8 to 10).", el("br"), hwOpen("shock")]],
-        ["warning", [hwB("6 · Early Warning: what should happen next? "), `Simple rules turn the numbers into a signal for each SOE (Alert, Watch or Good) with follow-up steps for the ministry. Today: ${lv("alert")} alert, ${lv("watch")} watch, ${lv("ok")} good (chapter 11).`, el("br"), hwOpen("warning")]],
-        ["report", [hwB("7 · Report: the write-up. "), "Five sections generated from everything above (summary, performance, distress and fiscal risk, stress tests, policy), ready to print or save as PDF. Check the numbers in the tabs before you use it in a briefing.", el("br"), hwOpen("report")]],
-        ["loop", ["Then the line starts again: ", hwB("new accounts each year, the same seven stops."), " That repetition is the monitoring part of the early-warning framework. An SOE it flags, for example a power utility, goes to a deeper model (the energy-sector fiscal-risk model) for a closer look."]],
+        ["warning", [hwB("5 · Early Warning: what should happen next? "), `Simple rules turn the numbers into a signal for each SOE (Alert, Watch or Good) with follow-up steps for the ministry. Today: ${lv("alert")} alert, ${lv("watch")} watch, ${lv("ok")} good (chapter 11).`, el("br"), hwOpen("warning")]],
+        ["shock", [hwB("6 · Shock Scenarios: what could make it worse? "), "Pick an SOE and a shock (fuel, exchange rate, interest rates, revenue, arrears) and compare with its no-shock path. Four views: one SOE; a Monte Carlo simulation of the range of outcomes; a portfolio-wide shock that ranks SOEs; and a check of the model against past years (chapters 8 to 10).", el("br"), hwOpen("shock")]],
+        ["loop", ["Then the line starts again: ", hwB("new accounts each year, the same six stops."), " That repetition is the monitoring part of the early-warning framework. An SOE it flags, for example a power utility, goes to a deeper model (the energy-sector fiscal-risk model) for a closer look."]],
       ];
     },
     draw(s, k, c) {
@@ -411,13 +409,6 @@
             s.rect(`t-w-${q.Entity}`, x + 8, ay + 32 + i * 26, colw - 16, 22, "f-surface", { from: "up", delay: i * 60 + j * 120 });
             s.text(`t-w-t-${q.Entity}`, x + 14, ay + 43 + i * 26, clip(q.Entity, 16), "t-ink", { size: 11, weight: 700, delay: i * 60 + j * 120 });
           });
-        });
-      } else if (id === "report") {
-        ["Executive summary", "Financial performance", "Distress and fiscal risk", "Stress tests", "Policy implications"].forEach((t, i) => {
-          const pw = Math.min(200, aw * 0.5), ph = Math.min(150, ah * 0.6), x = ax + i * Math.min(46, (aw - pw) / 4), y = ay + i * Math.min(22, (ah - ph) / 4);
-          s.rect("t-r-p" + i, x, y, pw, ph, "f-surface s-rule shadow", { from: "up", delay: i * 120 });
-          s.rect("t-r-b" + i, x, y, pw, 6, "f-line", { delay: i * 120 });
-          s.text("t-r-t" + i, x + 10, y + 22, `${i + 1} · ${t}`, "t-ink", { size: 11.5, weight: 700, delay: i * 120 });
         });
       }
       s.say(k);
@@ -926,9 +917,9 @@
     },
   });
 
-  /* 11 · early warning and the report */
+  /* 11 · early warning */
   HW_CHAPTERS.push({
-    id: "warn", rail: "Warning & report", title: "From numbers to action: early warning and the report",
+    id: "warn", rail: "Early warning", title: "From numbers to action: early warning",
     steps: (c) => {
       const ew = c.ew(), w = ew.order[0], lv = (x) => c.rows.filter((q) => ew.by[q.Entity].level === x).length;
       const rule = (CFG.TRIGGER_RULES.find((q) => q.id === ew.by[w.Entity].rules[0]) || {});
@@ -936,7 +927,7 @@
         ["rules", ["Numbers matter only if they lead to a decision. The ", hwB("Early Warning"), " tab applies simple rules to each SOE's latest year, grouped by issue: overall health, solvency and debt, liquidity, the stress test, the trend, and dependence on the government."]],
         ["board", ["Each SOE gets one signal, from its most severe rule: ", hwB(`Alert (${lv("alert")})`), ", ", hwB(`Watch (${lv("watch")})`), " or ", hwB(`Good (${lv("ok")})`), ". It shows where to look first."]],
         ["plan", ["Each rule comes with ", hwB("follow-up steps"), `. For ${w.Entity}, the first signal is “${rule.short || ""}”: ${(rule.steps || [rule.action || ""])[0]}. The steps are examples, to be agreed with the ministry.`, el("br"), hwOpen("warning")]],
-        ["report", ["Finally the ", hwB("Report"), " tab writes everything up in five sections: summary, financial performance, distress and fiscal risk, stress tests, and policy implications, ready to print or save as PDF. Then the cycle starts again with next year's accounts.", el("br"), hwOpen("report")]],
+        ["cycle", ["Then the cycle starts again with next year's accounts. To see what could make an SOE's position worse, go on to the last tab, ", hwB("Shock Scenarios"), " (chapters 8 to 10).", el("br"), hwOpen("shock")]],
       ];
     },
     draw(s, k, c) {
@@ -974,13 +965,16 @@
         }
         s.say(k); return;
       }
-      ["Executive summary", "Financial performance", "Distress and fiscal risk", "Stress tests", "Policy implications"].forEach((t, i) => {
-        const pw = Math.min(240, W * 0.5), ph = Math.min(300, H * 0.62), x = W / 2 - pw / 2 + (i - 2) * Math.min(60, W * 0.1), y = H / 2 - ph / 2 + (i - 2) * 14;
-        s.rect("r-p" + i, x, y, pw, ph, "f-surface s-rule shadow", { from: "up", delay: i * 140 });
-        s.rect("r-pb" + i, x, y, pw, 8, "f-line", { delay: i * 140 });
-        s.text("r-pt" + i, x + 12, y + 28, `${i + 1} · ${t}`, "t-ink t-disp", { size: 12.5, weight: 800, delay: i * 140 });
-        for (let j = 0; j < 4; j++) s.rect(`r-pl${i}-${j}`, x + 12, y + 46 + j * 16, pw * (0.55 + ((j * 37) % 30) / 100), 6, "f-rule", { delay: i * 140 });
+      // "cycle": the year-on-year loop, accounts → tabs → follow-up → next year's accounts
+      const lab = ["New accounts", "KPIs and score", "Expected cost", "Early warning", "Follow-up"], n = lab.length, R = Math.min(W, H) * 0.32, cx = W / 2, cy = H / 2;
+      lab.forEach((t, i) => {
+        const a = -Math.PI / 2 + (i * 2 * Math.PI) / n, x = cx + R * Math.cos(a), y = cy + R * Math.sin(a), bw = Math.min(150, W * 0.3);
+        s.html("r-cy" + i, x - bw / 2, y - 18, bw, t, () => [el("b", {}, t)], "chip", { from: "up", delay: i * 120, h: 36 });
+        // arrow along the circle to the next stop
+        const a0 = a + 0.42, a1 = a + (2 * Math.PI) / n - 0.42, r2 = R * 0.98;
+        s.arrow("r-cya" + i, cx + r2 * Math.cos(a0), cy + r2 * Math.sin(a0), cx + r2 * Math.cos(a1), cy + r2 * Math.sin(a1), "s-ink2", { delay: i * 120 + 200 });
       });
+      s.text("r-cyc", cx, cy, "every year", "t-ink2 t-disp", { anchor: "middle", size: 14, weight: 700 });
       s.say(k);
     },
   });
@@ -990,9 +984,8 @@
     ["kpi", "KPI Dashboard", "Is each SOE healthy, and why not?", "Ratios in four groups, coloured green, amber or red; one SOE's trend, or SOEs side by side.", [["set", "View, years and SOE"], ["adv", "Red / amber / green cut-offs are illustrative (Technical notes)"]]],
     ["altman", "Distress Indicator", "How close is each SOE to distress?", "The four health checks, the distress score and its zone, an indicative rating.", [["set", "SOE and period"], ["def", "Weights and zone cut-offs: leave as they are"]]],
     ["efc", "Expected Fiscal Cost", "What could each SOE cost the budget?", "PD × EAD × LGD for each SOE and the portfolio, as money and as a share of GDP.", [["set", "Share the government bears (LGD), share of debt at stake (EAD), GDP"], ["def", "Chance of distress per rating step: placeholder values"]]],
-    ["shock", "Shock Scenarios", "What could make it worse?", "One SOE against its no-shock path; a Monte Carlo simulation; a portfolio ranking under one broad shock; a check of the model against past years.", [["set", "SOE, then the shock type and its size"], ["def", "Structural factors when you have no data for them"], ["adv", "Cash financing, tariffs and collections, payment priority, PD method"]]],
     ["warning", "Early Warning", "What should happen next?", "A signal for each SOE, the rules grouped by issue, and an action plan with follow-up steps.", [["set", "Issue filter, and the SOE to look at"], ["adv", "Rules and steps are examples, to agree with the ministry"]]],
-    ["report", "Report", "How do I brief on it?", "Five automatically written sections from everything above.", [["set", "The stress channel and SOE for the charts"], ["set", "Print or save as PDF"]]],
+    ["shock", "Shock Scenarios", "What could make it worse?", "One SOE against its no-shock path; a Monte Carlo simulation; a portfolio ranking under one broad shock; a check of the model against past years.", [["set", "SOE, then the shock type and its size"], ["def", "Structural factors when you have no data for them"], ["adv", "Cash financing, tariffs and collections, payment priority, PD method"]]],
     ["assumptions", "Technical notes (for analysts)", "Where does each number come from?", "Every coefficient, threshold and default with its source and status, and the data dictionary.", [["adv", "Read before quoting results"]]],
   ];
   const HW_BADGE = { set: ["Set this", "set"], def: ["Leave at default", "def"], adv: ["Advanced", "adv"] };
@@ -1185,4 +1178,4 @@
     requestAnimationFrame(() => requestAnimationFrame(() => { if (pages.how.goto) pages.how.goto(anchor, true); }));
   }
   // which part of the guide explains each tab
-  const HW_GUIDE = { kpi: "hw-step-tool-kpi", altman: "hw-score", efc: "hw-cost", shock: "hw-shocks", warning: "hw-warn", report: "hw-step-tool-report", assumptions: "hw-map" };
+  const HW_GUIDE = { kpi: "hw-step-tool-kpi", altman: "hw-score", efc: "hw-cost", shock: "hw-shocks", warning: "hw-warn", assumptions: "hw-map" };

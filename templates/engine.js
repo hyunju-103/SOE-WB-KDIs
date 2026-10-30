@@ -92,7 +92,8 @@
     const enrich = (rows) => rows.map(enrichRow);
 
     function availableKpis(rows, category) {
-      const keys = category ? CFG.KPI_CATEGORIES[category] : Object.keys(CFG.KPI_THRESHOLDS);
+      // without a category: every KPI on the menu (the four categories), so alert counts match what is shown
+      const keys = category ? CFG.KPI_CATEGORIES[category] : CFG.CATEGORY_ORDER.flatMap((c) => CFG.KPI_CATEGORIES[c]);
       return keys.filter((k) => CFG.KPI_THRESHOLDS[k].requires.every((c) => rows.some((r) => isNum(r[c]))));
     }
     function classify(value, key) {

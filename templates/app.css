@@ -64,6 +64,8 @@ button { font: inherit; }
 .band { background: var(--band-bg); color: var(--band-ink); }
 .band .inner { padding-block: 18px 16px; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 24px; }
 .eyebrow { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+/* 2026-10-30: the "SOE Fiscal Risk Tool" line above the title in bright sky blue, readable on the navy band */
+.band .eyebrow { color: #7fd4ff; }
 .band h1 { color: var(--band-ink); font-size: clamp(20px, 2.6vw, 26px); font-weight: 700; letter-spacing: -.01em; margin-top: 2px; }
 .meta { display: flex; flex-wrap: wrap; gap: 6px; }
 .meta span { font-size: 12px; color: var(--band-ink-2); background: var(--band-chip); border-radius: 2px; padding: 3px 9px; }
@@ -1253,3 +1255,7 @@ body[data-tab="how"] { background: #f3f6f8; }
 .lp-split > .lp-sec { margin-top: 18px; }
 /* the headline sits on the same left edge as the intro and the sections below */
 .lp-title { text-align: left; margin-left: 0; margin-right: 0; }
+
+/* 2026-10-30: Shock Scenarios step 2, GDP shown directly instead of in a drop-down */
+.gdp-share { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
+.gdp-share-h { font-size: 13.5px; font-weight: 700; color: var(--heading); margin: 0 0 8px; }

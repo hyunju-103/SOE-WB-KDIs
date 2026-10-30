@@ -56,6 +56,8 @@ import schema
 import training_data
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
+# the training workbook participants download from the start screen, next to the Excel practice data
+WORKBOOK_DOCX = Path(__file__).resolve().parent / "training_material" / "SOE_Training_Workbook.docx"
 
 # --------------------------------------------------------------------------
 # payloads for the interactive app (config numbers + raw statement rows)
@@ -152,16 +154,20 @@ def training_payload() -> tuple:
     """The WB-KDIs training dataset for the page: (dataset entry, downloads).
     The dataset carries its supplementary sheets (Grants_detail, Source_lines,
     Validation, Definitions) so the page shows the same panels as after an
-    upload of the Excel file; the downloads are the exact CSV and Excel files
-    written to sample_data/ by `python training_data.py`."""
+    upload of the Excel file; the downloads are the exact Excel file written
+    to sample_data/ by `python training_data.py` and the Word workbook in
+    training_material/ (the CSV stays in sample_data/ but is no longer
+    offered on the page)."""
     df = training_data.training_portfolio()
     extras = {k: _pack_frame(v) for k, v in training_data.training_extras(df).items()}
     entry = dict(_pack(rows_payload(df)), label=training_data.TRAINING_LABEL, example=True, extras=extras)
     downloads = {
         "label": training_data.TRAINING_LABEL,
-        "csv": {"name": training_data.CSV_NAME, "text": training_data.training_csv_text(df)},
         "xlsx": {"name": training_data.XLSX_NAME, "b64": base64.b64encode(training_data.training_excel_bytes(df)).decode("ascii")},
     }
+    # the participants' workbook (Word), offered next to the Excel data on the start screen (meeting 2026-10-30)
+    if WORKBOOK_DOCX.exists():
+        downloads["docx"] = {"name": WORKBOOK_DOCX.name, "b64": base64.b64encode(WORKBOOK_DOCX.read_bytes()).decode("ascii")}
     return entry, downloads
 
 

@@ -5,10 +5,11 @@ SOE Fiscal Risk Tool — main entry point.
 
 Shows the interactive tool full-window, exactly as the HTML version looks:
 Home, How it works, KPI Dashboard, Distress Indicator, Expected Fiscal Cost,
-Shock Scenarios, Early Warning and Report (Government Support and Technical
-notes are built but kept off the tab bar), with the WB-KDIs training data loaded
-(8 invented SOEs, 2015-2024; downloadable from the start screen) and an
-upload box for your own CSV/Excel file.
+Early Warning and Shock Scenarios (Report removed 2026-10-30; Government Support
+and Technical notes are built but kept off the tab bar), with the WB-KDIs
+training data loaded (8 invented SOEs, 2015-2024; the Excel data and the Word
+training workbook are downloadable from the start screen) and an upload box for
+your own CSV/Excel file.
 
 The currently published UI is the reviewed standalone
 SOE-Fiscal-Risk-Final.html (preferred when present); report.py/templates

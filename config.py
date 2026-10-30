@@ -304,7 +304,8 @@ KPI_CATEGORIES = {
     "profitability": ["operating_margin", "cost_recovery", "net_margin", "roa", "roe"], #"ebitda_margin",
     "liquidity": ["current_ratio", "working_capital_ratio"],
     "solvency": ["debt_to_ebitda", "liabilities_to_assets", "interest_coverage", "debt_to_equity", "asset_turnover", "depreciation_to_ebitda"],
-    "fiscal_dependency": ["grants_to_revenue", "grants_to_expense", "effective_tax_rate"],
+    # effective_tax_rate taken off the menu (meeting 2026-10-30: not discussed with participants); still computed
+    "fiscal_dependency": ["grants_to_revenue", "grants_to_expense"],
 }
 CATEGORY_LABELS = {
     "profitability": "Profitability",
@@ -318,7 +319,7 @@ CATEGORY_ORDER = ["profitability", "liquidity", "solvency", "fiscal_dependency"]
 # Shock module defaults — sector fuel cost shares from SOE_shock_framework.pdf
 # (Section 4); remaining defaults are starting points pending calibration.
 #
-# Shock magnitudes follow the standard DSA/DSF convention: FX depreciation
+# Standard stress-test shock magnitudes: FX depreciation
 # 30%, interest-rate shock 200bps. Sliders on the Shock Scenarios page also
 # now permit negative values (favorable shocks — cheaper fuel, currency
 # appreciation, rate cuts, arrears clearing), not just adverse ones.
@@ -662,7 +663,7 @@ GLOSSARY = {
     "FX shock": "How much the local currency weakens against a hard currency like the US dollar. 15% means it now takes 15% more local currency to buy the same US$1.",
     "Interest rate shock": "How much borrowing costs rise, in basis points (100 bps = 1 percentage point). Only affects the share of debt at a floating (adjustable) interest rate.",
     "GDP/demand shock": "How much the wider economy contracts or grows, which affects how much customers buy from the SOE.",
-    "Revenue shock": "A shock to the SOE's revenue, sized in standard deviations of its own historical revenue volatility (or a sector default) rather than a flat percentage — the standard debt-sustainability-analysis convention.",
+    "Revenue shock": "A shock to the SOE's revenue, sized in standard deviations of its own historical revenue volatility (or a sector default) rather than a flat percentage.",
     "Refinancing shock": "The extra interest cost of rolling over debt that's coming due soon, at a stressed spread — distinct from a floating-rate shock, which reprices debt already on a variable rate.",
     "Government arrears": "Money the government owes the SOE (e.g. for services already delivered) but hasn't yet paid — this can squeeze the SOE's cash even if its accounting profit looks fine.",
     "Monte Carlo simulation": "Instead of one shock scenario, the tool runs thousands of random shock combinations to show a range of possible outcomes, not just one guess.",
@@ -796,7 +797,7 @@ REPORT_HEADLINE_KPIS = [
 ]
 
 # Standard stress: shock magnitudes and exposures come from DEFAULT_SHOCK_PARAMS
-# (DSA/DSF convention). Each channel below is also run on its own so the report
+# Each channel below is also run on its own so the report
 # can show which shock does the damage. Keys are DEFAULT_SHOCK_PARAMS magnitude keys.
 REPORT_STRESS_CHANNELS = {
     "fuel": ("Fuel", "fuel_shock_pct"),
@@ -836,7 +837,6 @@ HOW_GLOSSARY = [
     {"term": "Smooth PD curve (logistic)", "def": "A curve that turns any score into a PD without steps. Used only in Monte Carlo."},
     {"term": "Notch", "def": "One step on the rating ladder, for example from B to B+."},
     {"term": "Investment grade", "def": "The top part of the rating ladder, from BBB− up to AAA."},
-    {"term": "Debt sustainability analysis (DSA)", "def": "The IMF and World Bank method for judging whether a country's debt is sustainable. Its standard stress tests set the shock sizes the tool uses."},
     {"term": "Basis point", "def": "One hundredth of a percentage point: 100 basis points = 1 percentage point."},
     {"term": "Draw", "def": "One randomly chosen set of shock sizes in a Monte Carlo simulation: one possible future."},
     {"term": "Arrears", "def": "Payments that are overdue. Government arrears are bills the government owes the company but has not paid."},
@@ -852,7 +852,7 @@ HOW_GLOSSARY = [
 # buttons (mild / standard / severe) for the main magnitude; "standard" equals the standard
 # stress in DEFAULT_SHOCK_PARAMS. The sizes are illustrative: historical reference ranges
 # (median, minimum and maximum change over 3-5 years) are still to be added by the team.
-SHOCK_SIZE_NOTE = ("Sizes are illustrative starting points. 'Standard' is the DSA/DSF stress-test size. "
+SHOCK_SIZE_NOTE = ("Sizes are illustrative starting points. 'Standard' is the tool's standard stress-test size. "
                    "Historical reference ranges (median, minimum and maximum change over three to five years) "
                    "are still to be added. If you have your own data, for example how much fuel prices rose "
                    "last year, use that number.")
@@ -897,7 +897,7 @@ SHOCK_TYPES = [
     {"id": "revenue", "label": "Revenue fall (any cause)", "key": "revenue_shock_std_devs",
      "what": "Sales fall for any reason: lower demand, a collapse in tourism, a drought, a pandemic. Use it when the shock you have in mind is not in this list.",
      "who": "SOEs whose revenue swings a lot, or that depend on one market (tourism, exports, a commodity).",
-     "direction": "A bigger fall is worse. Set it as a % of revenue; the tool also shows it in standard deviations of the SOE's own revenue growth (the DSA convention is −1).",
+     "direction": "A bigger fall is worse. Set it as a % of revenue; the tool also shows it in standard deviations of the SOE's own revenue growth.",
      "path": ["Revenue falls while costs stay where they were.",
               "Operating profit drops by the share of the lost revenue that reaches profit.",
               "The loss leaves a cash gap, filled by borrowing.",
@@ -1032,7 +1032,7 @@ PARAMETER_REGISTER = [
        "Interim reference pending a dedicated maximum-PD table", "EFC backstop chart"),
     _p("Probability of distress", "Legacy PD by zone", ", ".join(f"{k} {v:.0%}" for k, v in PD_BY_ZONE.items()), "placeholder",
        "SOE shock framework note (s.10); kept only as a documented legacy value, not used", "—"),
-    _p("Exposure at default", "EAD basis", f"share × total liabilities (default {EAD_SHARE_DEFAULT:.0%}); guaranteed debt if observed", "proxy",
+    _p("Exposure at default", "EAD basis", f"share × total liabilities (default {EAD_SHARE_DEFAULT:.0%})", "proxy",
        "Implicit-guarantee assumption; 60% / 80% sensitivity cases from the team discussion", "EFC, shocks"),
     _p("Loss given default", "LGD", f"{LGD_SLIDER_DEFAULT}% default, {LGD_SLIDER_MIN}–{LGD_SLIDER_MAX}%", "user",
        "Set by the user; GEMs sector values shown as reference", "EFC, shocks"),
@@ -1043,11 +1043,11 @@ PARAMETER_REGISTER = [
     _p("KPIs", "Suppression rule", "ROE, D/E, D/EBITDA, Dep/EBITDA, ETR → n/a when the denominator ≤ 0", "design",
        "Avoids reading a sign-flipped ratio as good; shown as a flag", "KPI Dashboard"),
     _p("Shock magnitudes", "FX depreciation (standard stress)", f"{_S['fx_shock_pct']:.0%}", "literature",
-       "IMF–World Bank LIC DSF Guidance Note (2018) standard exchange-rate shock — paragraph to cite", "Standard stress, Early Warning"),
+       "Standard exchange-rate stress-test shock (illustrative) — source to be confirmed", "Standard stress, Early Warning"),
     _p("Shock magnitudes", "Interest-rate shock (standard stress)", f"+{_S['rate_shock_bps']:.0f} bps", "literature",
-       "DSF / MAC SRDSF standard interest-rate shock — paragraph to cite", "Standard stress"),
+       "Standard interest-rate stress-test shock (illustrative) — source to be confirmed", "Standard stress"),
     _p("Shock magnitudes", "Revenue shock (standard stress)", f"{_S['revenue_shock_std_devs']:+.0f} s.d. of own revenue growth", "literature",
-       "DSF convention of shocks sized in historical standard deviations", "Standard stress"),
+       "Shocks sized in historical standard deviations (illustrative) — source to be confirmed", "Standard stress"),
     _p("Shock magnitudes", "Fuel price shock (standard stress)", f"+{_S['fuel_shock_pct']:.0%}", "placeholder",
        "Illustrative; calibrate from oil-price history (e.g. a one-s.d. annual move)", "Standard stress"),
     _p("Shock magnitudes", "Refinancing spread (standard stress)", f"+{_S['refinancing_spread_bps']:.0f} bps", "placeholder",
@@ -1175,9 +1175,9 @@ PARAMETER_REGISTER = [
     _p("Government support", "Dynamic cap trigger", f"rating down {DYNAMIC_CAP_TRIGGER_NOTCHES}+ notches or Negative outlook → {DYNAMIC_CAP_TIER}", "proxy",
        "After S&P GRE criteria (para. 47) — paragraph to verify", "Government Support"),
     _p("Early warning", "Trigger rules and actions", f"{len(TRIGGER_RULES)} rules", "placeholder",
-       "Illustrative rules and pre-agreed actions for discussion with the Ministry of Finance", "Early Warning, Report"),
+       "Illustrative rules and pre-agreed actions for discussion with the Ministry of Finance", "Early Warning"),
     _p("Early warning", "EFC / GDP bands", f"watch {REPORT_EFC_GDP_WATCH:.1%}, alert {REPORT_EFC_GDP_ALERT:.1%}", "placeholder",
-       "Illustrative; relate to the fiscal risk statement's materiality threshold", "Home, Report"),
+       "Illustrative; relate to the fiscal risk statement's materiality threshold", "Home, Expected Fiscal Cost"),
     _p("Narrative", "Single-driver share / strong-component thresholds", f"{SINGLE_DRIVER_SHARE_THRESHOLD:.0%} / X1 {ZEM_COMPONENT_STRONG_THRESHOLD['X1']}, X2 {ZEM_COMPONENT_STRONG_THRESHOLD['X2']}, X3 {ZEM_COMPONENT_STRONG_THRESHOLD['X3']}, X4 {ZEM_COMPONENT_STRONG_THRESHOLD['X4']}", "placeholder",
        "Wording thresholds for the automated summaries only", "Altman Z-EM text"),
 ]

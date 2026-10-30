@@ -119,6 +119,7 @@
   }
   const b64Bytes = (b64) => { const bin = atob(b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return u8; };
   const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   /** "Copy data" (+ "Download CSV" when the page runs on its own, outside a viewer frame) */
   function dataButtons(getCSV, name, what = "data") {
     const box = el("div", { class: "btn-row" });
@@ -600,7 +601,7 @@
       return { row: r, base, str, drop, desc: E.describeShocks(pp), params: pp };
     });
   }
-  /** the standard stress (DSA/DSF convention) with each SOE's own exposures — used by Home, Report and Early Warning */
+  /** the standard stress with each SOE's own exposures — used by Home and Early Warning */
   const standardStress = (rows, mags = STD_MAG) => stressAll(rows, mags, expoFor, CFG.DEFAULT_SHOCK_PARAMS.shock_duration_years, CFG.MC_HORIZON_YEARS, S.efc.lgd, S.gdp, S.growth, S.efc.ead);
 
   function initPageState() {
@@ -617,7 +618,6 @@
       mc: { n: CFG.MC_DEFAULT_SIMULATIONS, fsd: CFG.MC_DEFAULT_FUEL_STD, xsd: CFG.MC_DEFAULT_FX_STD, rsd: CFG.MC_DEFAULT_RATE_STD_BPS, vsd: CFG.MC_DEFAULT_REVENUE_STD_SD,
         corr: Object.assign({}, CFG.MC_DEFAULT_CORRELATIONS, { "fuel|fx": CFG.MC_DEFAULT_CORRELATION }) },
     };
-    S.rep = { scen: "combined", soe: null, all: false };
     S.asm = { status: new Set(Object.keys(CFG.PARAMETER_STATUS_LABELS)), group: "all" };
     S.gre = { sov: "BB", outlook: "Stable", role: {}, link: {}, sel: firstName };
     S.ew = { tl: null, cat: "all", sel: null };
@@ -698,40 +698,6 @@
     ["Energy Sector Fiscal Risk", "Model exists", "watch", "The deep dive for power utilities this screen flags: tariffs, cost recovery, subsidies and the whole sector, including independent power producers. Built for Ghana, being generalised."],
     ["PSO Analysis", "Later", "none", "Whether the compensation for public service obligations is adequate or rewards inefficiency. Needs counterfactual data; to be developed after the hidden-subsidies work."],
   ];
-  /** hero + four headline tiles for the whole portfolio (Home and the Report's executive summary) */
-  function overviewBlocks(hero, tiles, st) {
-    const rows = latestOf(allRows()).sort((a, b) => b.Z_EM - a.Z_EM), n = rows.length;
-    const zc = zoneCounts(rows);
-    hero.replaceChildren(
-      el("div", { class: "hero-label" }, "SOEs in distress or the grey zone"),
-      el("div", { class: "hero-value" }, n ? Math.round(((zc.Distress + zc.Grey) / n) * 100) + "%" : "—", el("small", {}, `${zc.Distress + zc.Grey} of ${pl(n, "SOE")} · average Z″ ${fmt(mean(rows.map((r) => r.Z_EM)), 2)}`)),
-      ...zoneBar(zc, n),
-      el("p", { class: "note", style: "margin:0" }, E.zoneSummary(rows)));
-    const lgd = S.efc.lgd, efc = rows.map((r) => ({ r, e: E.efcRow(r, lgd, S.efc.ead, S.efc.basis).EFC }));
-    const total = sum(efc.map((x) => x.e));
-    const top = efc.slice().sort((a, b) => (b.e || 0) - (a.e || 0))[0];
-    const drops = st.filter((x) => x.drop).map((x) => x.row.Entity);
-    const eB = sum(st.map((x) => last(x.base).EFC)), eS = sum(st.map((x) => last(x.str).EFC));
-    const first = new Map();
-    byYearAsc(allRows()).forEach((r) => { if (!first.has(r.Entity)) first.set(r.Entity, r); });
-    const moved = rows.map((r) => ({ r, f: first.get(r.Entity), dz: r.Z_EM - first.get(r.Entity).Z_EM })).filter((m) => m.f.Year !== m.r.Year);
-    const worst = moved.sort((a, b) => a.dz - b.dz)[0];
-    let efcSt = null;
-    if (S.gdp) { const g = total / S.gdp; efcSt = g >= CFG.REPORT_EFC_GDP_ALERT ? "alert" : g >= CFG.REPORT_EFC_GDP_WATCH ? "watch" : "ok"; }
-    const eadTxt = S.efc.basis === "guaranteed_debt" ? "EAD guaranteed debt where reported" : `EAD ${pct0(S.efc.ead)} of liabilities`;
-    const dropTxt = drops.length > 4 ? drops.slice(0, 4).join(", ") + ` and ${drops.length - 4} more` : drops.join(", ");
-    tiles.replaceChildren(
-      tile("Expected fiscal cost, portfolio", efcSt, efcSt ? STLABEL[efcSt] : null, money(total), CUR,
-        S.gdp ? `${pctS(total / S.gdp)} of GDP · LGD ${fmt(lgd, 0)}% · ${eadTxt}` : `PD × EAD × LGD, latest year · LGD ${fmt(lgd, 0)}% · ${eadTxt} · add GDP on the Expected Fiscal Cost tab`),
-      top ? tile("Largest single exposure", zk(top.r.Zone), ZLABEL[zk(top.r.Zone)], money(top.e), CUR, `${top.r.Entity} · ${total ? Math.round((top.e / total) * 100) : 0}% of portfolio EFC · rated ${top.r.Rating}, PD ${pctAuto(E.pdByRating(top.r.Rating))}`) : null,
-      tile("Drop a zone under standard stress", drops.length ? "alert" : "ok", drops.length ? "Alert" : "Good", String(drops.length), `of ${pl(n, "SOE")}`,
-        (drops.length ? dropTxt + " · " : "") + `by year ${CFG.MC_HORIZON_YEARS}, each SOE under the standard stress with its own exposures · which SOEs drive the cost: Shock Scenarios › Portfolio macro shock`),
-      worst && worst.dz < 0
-        ? tile("Fastest deterioration", zk(worst.r.Zone), ZLABEL[zk(worst.r.Zone)], sgn(worst.dz, 2), "Z″ points", `${worst.r.Entity}: ${fmt(worst.f.Z_EM, 2)} in ${worst.f.Year} to ${fmt(worst.r.Z_EM, 2)} in ${worst.r.Year} · ${worst.f.Rating} to ${worst.r.Rating}`)
-        : tile("Fastest deterioration", "ok", "Good", "None", "", moved.length ? "No SOE's Z″ fell over the period" : "Needs at least two years per SOE"),
-    );
-    return { rows, zc, total, top, drops, eB, eS, worst };
-  }
   const byYearAsc = (rows) => rows.slice().sort((a, b) => a.Year - b.Year);
   const pct0 = (v) => fmt(v * 100, 0) + "%";
   const go = (id, label) => el("a", { href: "#view-" + id, onclick: (e) => { e.preventDefault(); showTab(id); window.scrollTo({ top: 0 }); } }, label);
@@ -809,9 +775,8 @@
     ["how", "How it works", "Read once: from accounts to fiscal cost, and how a shock travels"],
     ["kpi", "Check health", "KPI Dashboard and Distress Indicator: which SOEs are weak, and why"],
     ["efc", "Expected fiscal cost", "What each SOE could cost the budget: PD × EAD × LGD"],
-    ["shock", "Test shocks", "What could make it worse: fuel, exchange rate, interest rates, revenue, arrears"],
     ["warning", "Act early", "Trigger rules and the follow-up each signal calls for"],
-    ["report", "Report", "A five-section write-up of all of the above"],
+    ["shock", "Test shocks", "What could make it worse: fuel, exchange rate, interest rates, revenue, arrears"],
   ];
   function workflow() {
     return el("ol", { class: "flow", "aria-label": "How to use the tool" }, WORKFLOW.map(([id, t, d], i) =>
@@ -901,7 +866,7 @@
     dataDetails() {
       const cols = el("details", { class: "plain" }, el("summary", {}, "Required and optional columns"),
         el("p", { class: "note" }, el("b", {}, "Required: "), CFG.REQUIRED_COLUMNS.join(", ") + "."),
-        el("p", { class: "note" }, el("b", {}, "Optional, used when present: "), "Short Term Debt, FX Debt, Fuel Cost and the exposure shares (bottom-up shock exposures); Government Guaranteed Debt (observed EAD); Source File, Source Page, Audit Status, Extraction Method and Data Quality Flag (provenance). The full list with synonyms is in the ", go("assumptions", "Technical notes"), "."));
+        el("p", { class: "note" }, el("b", {}, "Optional, used when present: "), "Short Term Debt, FX Debt, Fuel Cost and the exposure shares (bottom-up shock exposures); Government Guaranteed Debt (kept for reference); Source File, Source Page, Audit Status, Extraction Method and Data Quality Flag (provenance). The full list with synonyms is in the ", go("assumptions", "Technical notes"), "."));
       const prevCols = ["Entity", "Year", "Sector", "Revenues", "Operating Profits (EBIT)", "Net Income", "Total Assets", "Total Liabilities", "Equity", "Government Grants"];
       const preview = el("details", { class: "plain" }, el("summary", {}, `Data preview (${S.rows.length} rows)`),
         simpleTable(prevCols, S.rows.slice(0, 300).map((r) => prevCols.map((c) => (NUMCOLS.has(c) && c !== "Year" ? money(r[c]) : String(r[c] ?? "")))), { tall: true, right: (i) => i >= 3 }));
@@ -924,7 +889,7 @@
       const withG = uniq(S.en.filter((r) => ok(r["Government Guaranteed Debt"])).map((r) => r.Entity)).length;
       const facts = el("ul", { class: "facts" },
         el("li", {}, el("b", {}, `${withEx} of ${pl(latest.length, "SOE")}`), " carry at least one shock exposure in the data (fuel cost, FX or short-term debt, exposure shares); the rest use sector or generic defaults on the Shock Scenarios tab."),
-        el("li", {}, el("b", {}, `${withG} of ${pl(latest.length, "SOE")}`), " report government-guaranteed debt, which the Expected Fiscal Cost tab can use as the exposure at default."),
+        el("li", {}, el("b", {}, `${withG} of ${pl(latest.length, "SOE")}`), " report government-guaranteed debt (kept with the data; the Expected Fiscal Cost tab uses a share of total liabilities as the exposure at default)."),
         el("li", {}, "Parameters: ", el("b", {}, String(CFG.PARAMETER_REGISTER.filter((r) => r.status === "placeholder").length)), " of " + CFG.PARAMETER_REGISTER.length + " numbers the tool uses are still placeholders that need a source; see the ", go("assumptions", "Technical notes"), "."));
       body.replaceChildren(...(blocks.length ? blocks : [el("p", { class: "note", style: "margin-top:0" }, "This file carries no provenance columns. Add source_file, source_page, audit_status, extraction_method and data_quality_flag (they are in the standard template) to record where each number came from and whether it is audited, extracted or a proxy.")]), facts);
     },
@@ -935,9 +900,8 @@
           el("li", {}, go("kpi", "KPI Dashboard"), " : profitability, liquidity, solvency and fiscal-dependency ratios against illustrative thresholds; trend per SOE and comparison across SOEs."),
           el("li", {}, go("altman", "Distress Indicator"), " : one distress score per SOE (Altman Z″-EM) from four health checks, with its zone (safe, grey, distress) and an indicative rating."),
           el("li", {}, go("efc", "Expected Fiscal Cost"), " : PD × EAD × LGD for each SOE and the portfolio, from the latest accounts. This is where SOEs are added up."),
-          el("li", {}, go("shock", "Shock Scenarios"), " : one SOE under a fuel, exchange-rate, interest-rate, revenue or arrears shock; a Monte Carlo simulation of the range of outcomes; a portfolio macro shock that ranks SOEs; and a check of the model against past years."),
           el("li", {}, go("warning", "Early Warning"), " : trigger rules, grouped by issue, and the follow-up each signal calls for."),
-          el("li", {}, go("report", "Report"), " : everything above as a five-section report, ready to print.")),
+          el("li", {}, go("shock", "Shock Scenarios"), " : one SOE under a fuel, exchange-rate, interest-rate, revenue or arrears shock; a Monte Carlo simulation of the range of outcomes; a portfolio macro shock that ranks SOEs; and a check of the model against past years.")),
         el("p", { class: "note" }, "For analysts: every coefficient and default, with its source and status, is in the ", go("assumptions", "Technical notes"), ". Every calculation runs in this page with the same formulas and config.py values as the Python tool."),
         el("details", { class: "plain" }, el("summary", {}, "Glossary — what the terms mean"),
           simpleTable(["Term", "Meaning"], Object.entries(CFG.GLOSSARY).map(([k, v]) => [k, v]), { cls: "glossary" })),
@@ -969,25 +933,24 @@
     });
     return [shown, extra, " ", btn];
   }
-  /** download the WB-KDIs training data (Excel with its supplementary sheets, or CSV); uploading either file
-   *  back through "Load data" reproduces what the page shows for the built-in training data */
+  /** download the training material: the WB-KDIs training data (Excel, with its supplementary sheets; uploading it
+   *  back through "Load data" reproduces what the page shows for the built-in training data) and the training
+   *  workbook (Word) that participants fill in while they use the tool (meeting 2026-10-30: Excel + Word, no CSV) */
   function trainingDownloads(where) {
     const D = DOWNLOADS;
-    if (!D || !D.csv) return null;
-    const xlsxBtn = D.xlsx && canDownload ? el("button", { type: "button", class: where === "home" ? "lp-dl primary" : "btn-ghost", onclick: () => download(D.xlsx.name, b64Bytes(D.xlsx.b64), XLSX_TYPE) }, "⬇ Excel (.xlsx)") : null;
-    const csvBtn = el("button", { type: "button", class: where === "home" ? "lp-dl" : "btn-ghost" }, canDownload ? "⬇ CSV" : "Copy CSV");
-    csvBtn.addEventListener("click", async () => {
-      if (canDownload) { download(D.csv.name, D.csv.text); return; }
-      try { await navigator.clipboard.writeText(D.csv.text); csvBtn.textContent = "Copied"; setTimeout(() => (csvBtn.textContent = "Copy CSV"), 1500); } catch (e) { /* clipboard blocked: nothing else to offer in a viewer frame */ }
-    });
+    if (!D || !(D.xlsx || D.docx)) return null;
+    const cls = (primary) => where === "home" ? "lp-dl" + (primary ? " primary" : "") : "btn-ghost";
+    const xlsxBtn = D.xlsx && canDownload ? el("button", { type: "button", class: cls(true), onclick: () => download(D.xlsx.name, b64Bytes(D.xlsx.b64), XLSX_TYPE) }, "⬇ Excel data (.xlsx)") : null;
+    const docxBtn = D.docx && canDownload ? el("button", { type: "button", class: cls(false), onclick: () => download(D.docx.name, b64Bytes(D.docx.b64), DOCX_TYPE) }, "⬇ Workbook (Word)") : null;
+    if (!xlsxBtn && !docxBtn) return null;
     if (where === "about") {
-      return [el("div", { class: "lbl", style: "margin-top:12px" }, "Training data file"), el("div", { class: "btn-row" }, xlsxBtn, csvBtn)];
+      return [el("div", { class: "lbl", style: "margin-top:12px" }, "Training files"), el("div", { class: "btn-row" }, xlsxBtn, docxBtn)];
     }
-    return el("div", { class: "lp-sample", role: "group", "aria-label": "Download the training data" },
+    return el("div", { class: "lp-sample", role: "group", "aria-label": "Download the training files" },
       el("div", { class: "lp-sample-txt" },
-        el("b", {}, "Practice file: WB-KDIs training data"),
-        el("span", {}, "8 invented SOEs in 7 sectors, 2015–2024, every column filled. Download it, then load it here to see every chart.")),
-      el("div", { class: "lp-sample-btns" }, xlsxBtn, csvBtn));
+        el("b", {}, "Practice files: WB-KDIs training"),
+        el("span", {}, "The data (8 invented SOEs in 7 sectors, 2015–2024) to load here, and the workbook to fill in as you go through the tabs.")),
+      el("div", { class: "lp-sample-btns" }, xlsxBtn, docxBtn));
   }
   pages.home = {
     build(root) {
@@ -1012,7 +975,7 @@
           el("p", {}, "Edward Altman's credit-scoring formula for companies in emerging markets. It weights four balance-sheet ratios into one number; the higher, the healthier."),
           scale, formula),
         step(3, "Expected fiscal cost", el("p", {}, "The score gives an indicative rating and a chance of default (PD). PD × debt at stake (EAD) × the share the government would bear (LGD) is what the SOE could cost the budget.")),
-        step(4, "Shocks and warnings", el("p", {}, "How a fuel, exchange-rate, interest-rate or revenue shock changes the score and the cost, and which signals call for action.")));
+        step(4, "Warnings and shocks", el("p", {}, "Which signals call for action, and how a fuel, exchange-rate, interest-rate or revenue shock changes the score and the cost.")));
       const scope = el("p", { class: "lp-scope" }, "Covers non-financial SOEs; state banks and other financial SOEs need a different framework. ", go("about", "What the tool covers"));
 
       /* 2. load data: the sky-blue drop area, the column and preview folds, then what is on screen */
@@ -1056,7 +1019,7 @@
       /* 3. what the tool finds in the data on screen: four questions with today's answers */
       H.qs = el("div", { class: "lp-qs" });
       root.replaceChildren(el("div", { class: "lp" },
-        el("h2", { class: "lp-title" }, "About this tool..."),
+        el("h2", { class: "lp-title" }, "About this tool"),
         // the tool's purpose, method and limits, as written by the team (paragraph breaks added for reading)
         el("div", { class: "lp-intro" },
           el("p", {}, ...moreText(
@@ -1068,7 +1031,7 @@
           el("section", { class: "lp-sec", "aria-labelledby": "lp-h-find" }, el("h3", { class: "lp-h", id: "lp-h-find" }, "What the tool finds in this data"), H.qs)),
         // how the tool gets there, under the data so the upload box stays on the first screen
         el("section", { class: "lp-sec", "aria-labelledby": "lp-h-calc" }, el("h3", { class: "lp-h", id: "lp-h-calc" }, "What the tool calculates"), steps, scope),
-        el("nav", { class: "lp-links", "aria-label": "More" }, go("how", "How it works, step by step"), go("report", "Report"), go("about", "About the tool and your data"))));
+        el("nav", { class: "lp-links", "aria-label": "More" }, go("how", "How it works, step by step"), go("about", "About the tool and your data"))));
     },
     render() {
       const H = this.H, all = allRows(), rows = latestOf(all), n = rows.length, zc = zoneCounts(rows);
@@ -1091,8 +1054,8 @@
       put(H.qs,
         q("altman", "Which SOEs are in trouble?", String(zc.Distress + zc.Grey), `of ${n}`, zones(`in distress or the grey zone, ${zc.Distress} of them in distress`), "Distress Indicator"),
         q("efc", "What could they cost the budget?", money(total), CUR, S.gdp ? `expected fiscal cost, ${pctS(total / S.gdp)} of GDP` : "expected fiscal cost, from the latest accounts", "Expected Fiscal Cost"),
-        q("shock", "What if a shock hits?", String(drops), `of ${n}`, `fall a risk zone under the standard stress` + (ok(rise) && rise > 0.005 ? `; expected cost rises ${pct0(rise)} by year ${CFG.MC_HORIZON_YEARS}` : ""), "Shock Scenarios"),
-        q("warning", "What needs action now?", String(lv("alert")), `of ${n}`, `have an alert signal` + (watch ? `, and ${watch} more ${watch === 1 ? "is" : "are"} on watch` : ""), "Early Warning"));
+        q("warning", "What needs action now?", String(lv("alert")), `of ${n}`, `have an alert signal` + (watch ? `, and ${watch} more ${watch === 1 ? "is" : "are"} on watch` : ""), "Early Warning"),
+        q("shock", "What if a shock hits?", String(drops), `of ${n}`, `fall a risk zone under the standard stress` + (ok(rise) && rise > 0.005 ? `; expected cost rises ${pct0(rise)} by year ${CFG.MC_HORIZON_YEARS}` : ""), "Shock Scenarios"));
     },
   };
   function readUpload(file, msg) {
@@ -1237,7 +1200,7 @@
       const head = pageHead("PERFORMANCE MONITORING", "KPI Dashboard", "Profitability, liquidity, solvency, and fiscal-dependency ratios. Pick a ratio from each column's dropdown — thresholds are illustrative, pending recalibration.");
       const foot = el("div", { class: "foot" },
         el("div", {}, el("b", {}, "Thresholds. "), "Illustrative IMF SOE Health Check Tool-style red/amber/green cuts — provisional starting points, not calibrated to a specific country sample."),
-        el("div", {}, el("b", {}, "Suppressed ratios. "), "ROE, Debt/Equity, Debt/EBITDA, Depreciation/EBITDA and the effective tax rate show n/a when equity, EBITDA or EBIT is negative — the ratio's sign flips and would otherwise read as good. The scorecard counts these as alerts, as the guidance note recommends."));
+        el("div", {}, el("b", {}, "Suppressed ratios. "), "ROE, Debt/Equity, Debt/EBITDA and Depreciation/EBITDA show n/a when equity or EBITDA is negative — the ratio's sign flips and would otherwise read as good. The scorecard counts these as alerts, as the guidance note recommends."));
       H.out = el("div");
       H.strip = statStrip();
       root.replaceChildren(head, H.strip, el("div", { class: "card", style: "margin-bottom:16px" }, tools), H.out, foot);
@@ -1426,15 +1389,35 @@
       H.out.replaceChildren(el("div", { style: "margin-bottom:8px" }, periodControls(st, () => this.render())), H.label,
         el("div", { class: "grid" }, el("div", { class: "s7" }, H.bench.root), el("div", { class: "s5" }, H.dist.root), el("div", { class: "s12" }, H.drv.root)));
     },
+    /** meeting 2026-10-30: the strip answers three questions for the SOE chosen below (in distress or not, its
+     *  shadow rating, its probability of default) plus its distress score; the portfolio view shows the same four
+     *  for the whole portfolio. */
     renderStrip() {
+      const st = S.alt;
+      if (st.view === "components") {
+        const full = F().filter((r) => r.Entity === st.soe).sort((a, b) => a.Year - b.Year);
+        const d = full.filter((r) => r.Year >= st.from && r.Year <= st.to);
+        const r = last(d.length ? d : full);
+        if (r) {
+          const z = zk(r.Zone), pd = E.pdByRating(r.Rating), first = (d.length ? d : full)[0];
+          const inZone = r.Zone === "Distress" ? "In distress" : r.Zone === "Grey" ? "Grey zone" : "Safe";
+          const cut = r.Zone === "Distress" ? `Z″ ≤ ${CFG.Z_DISTRESS_CUTOFF}` : r.Zone === "Grey" ? `${CFG.Z_DISTRESS_CUTOFF} < Z″ ≤ ${CFG.Z_SAFE_CUTOFF}` : `Z″ > ${CFG.Z_SAFE_CUTOFF}`;
+          const zs = (d.length ? d : full).map((q) => q.Z_EM).filter(ok);
+          put(this.H.strip,
+            tile(`${st.soe} · in distress?`, z, ZLABEL[z], inZone, String(r.Year), `${cut} · ${distressWhy(r)}`),
+            tile("Distress score (Altman Z″)", z, ZLABEL[z], fmt(r.Z_EM, 2), "", zs.length > 1 ? `median ${first.Year}–${r.Year}: ${fmt(median(zs), 2)} · ${first.Year}: ${fmt(first.Z_EM, 2)}` : `${r.Year}`),
+            tile("Shadow credit rating", null, null, r.Rating, "", `indicative rating read off the Z″ score, ${r.Year}`),
+            tile("Probability of default", null, null, pctAuto(pd), "", `one-year PD for rating ${r.Rating}`));
+          return;
+        }
+      }
       const rows = latestOf(F()), n = rows.length, zc = zoneCounts(rows), mz = median(rows.map((r) => r.Z_EM)), mzone = E.classifyZone(mz);
-      const fallers = rows.filter((r) => { const nc = E.notchChange(S.en, r.Entity)[2]; return nc !== null && nc <= -CFG.DYNAMIC_CAP_TRIGGER_NOTCHES; }).length;
+      const mpd = median(rows.map((r) => E.pdByRating(r.Rating)).filter(ok));
       put(this.H.strip,
-        tile("Distress zone", zc.Distress ? "alert" : "ok", zc.Distress ? "Alert" : "Good", String(zc.Distress), `of ${n}`, `Z″ ≤ ${CFG.Z_DISTRESS_CUTOFF} · latest year`),
-        tile("Grey zone", zc.Grey ? "watch" : "ok", zc.Grey ? "Watch" : "Good", String(zc.Grey), `of ${n}`, `${CFG.Z_DISTRESS_CUTOFF} < Z″ ≤ ${CFG.Z_SAFE_CUTOFF}`),
-        tile("Safe zone", "ok", "Safe", String(zc.Safe), `of ${n}`, `Z″ > ${CFG.Z_SAFE_CUTOFF}`),
-        tile("Median Z″", zk(mzone), ZLABEL[zk(mzone)], fmt(mz, 2), "", `indicative rating ${E.zRating(mz)}`),
-        countTile(`Rating down ${CFG.DYNAMIC_CAP_TRIGGER_NOTCHES}+ notches`, fallers, n, "first to latest year", "watch"));
+        tile("SOEs in distress", zc.Distress ? "alert" : "ok", zc.Distress ? "Alert" : "Good", String(zc.Distress), `of ${n}`, `Z″ ≤ ${CFG.Z_DISTRESS_CUTOFF} · ${zc.Grey} more in the grey zone · latest year`),
+        tile("Median distress score (Z″)", zk(mzone), ZLABEL[zk(mzone)], fmt(mz, 2), "", "median of the SOEs shown, latest year"),
+        tile("Median shadow rating", null, null, E.zRating(mz), "", "rating at the median Z″"),
+        tile("Median probability of default", null, null, pctAuto(mpd), "", "one-year PD, median of the SOEs shown"));
     },
     render() {
       const st = S.alt, H = this.H;
@@ -1735,18 +1718,15 @@
       const lgdBox = el("div", { class: "fields" });
       if (st.mode === "single") lgdBox.appendChild(fSlider("LGD", { min: CFG.LGD_SLIDER_MIN, max: CFG.LGD_SLIDER_MAX, step: 1, value: st.lgd, fmt: (v) => v + "%", info: CFG.GLOSSARY.LGD }, (v) => { st.lgd = v; this.render(); }));
       else names.forEach((n) => lgdBox.appendChild(fSlider(`${n} LGD`, { min: CFG.LGD_SLIDER_MIN, max: CFG.LGD_SLIDER_MAX, step: 1, value: st.per[n] ?? st.lgd, fmt: (v) => v + "%" }, (v) => { st.per[n] = v; this.render(); })));
-      const gRows = view.filter((r) => ok(r["Government Guaranteed Debt"])).length;
+      // meeting 2026-10-30: EAD is a share of total liabilities only. If the State stands behind, say, 80% of an SOE's
+      // liabilities, that share is the exposure; a separate "guaranteed debt" basis is not needed (switch removed).
+      st.basis = "total_liabilities";
       H.eadNote = el("small", { class: "muted" });
       settings.body.append(el("div", { class: "fields" },
         fSelect("Year", yrs, st.year, (v) => { st.year = v; rebuild(); }, { num: true }),
         el("div", { class: "fld" }, el("span", { class: "lbl" }, "LGD input mode"), seg([["single", "Single LGD"], ["per", "Per-SOE LGD"]], st.mode, (v) => { st.mode = v; rebuild(); })),
         lgdBox,
-        el("div", { class: "fld" }, el("span", { class: "lbl" }, "Exposure at default (EAD)", info("What the government would have to cover if the SOE defaulted. Total liabilities overstate it when part of the debt is owed to parties the government would not bail out, so 60% and 80% are sensitivity cases. Where the data report government-guaranteed debt, that observed figure can be used instead.")),
-          seg([["total_liabilities", "Share of liabilities"], ["guaranteed_debt", "Guaranteed debt"]], st.basis, (v) => { st.basis = v; rebuild(); }, "EAD basis"),
-          el("small", { class: "muted" }, st.basis === "guaranteed_debt"
-            ? (gRows ? `${gRows} of ${pl(view.length, "SOE")} report guaranteed debt in ${st.year}; the others fall back to the share of liabilities below.` : `No SOE reports Government Guaranteed Debt in ${st.year}, so every SOE uses the share of liabilities below.`)
-            : "Proxy: a share of total liabilities (100% was the original assumption).")),
-        fSlider(st.basis === "guaranteed_debt" ? "Fallback: share of total liabilities" : "EAD: share of total liabilities", { min: 0.5, max: 1, step: 0.1, value: st.ead, fmt: pct0, info: "60% and 80% are the sensitivity cases agreed for the proxy; 100% counts every liability." }, (v) => { st.ead = v; this.render(); }),
+        fSlider("EAD: share of total liabilities", { min: 0.5, max: 1, step: 0.1, value: st.ead, fmt: pct0, info: "Exposure at default: the share of the SOE's total liabilities the government would have to cover if the SOE defaulted. 100% counts every liability (the government stands behind the whole SOE); 60% and 80% are sensitivity cases." }, (v) => { st.ead = v; this.render(); }),
         gdpField(() => this.render())));
       H.strip = statStrip();
       H.bar = card("EFC by SOE", null, null); H.bar.body.append(el("div", { class: "chart" }), el("div", { style: "margin-top:8px" }));
@@ -1754,19 +1734,23 @@
       H.sens = card("Government backstop sensitivity — one SOE", null, fSelect(null, names, st.sens, (v) => { st.sens = v; this.render(); }));
       H.sens.head.querySelector(".card-tools").prepend(el("span", { class: "chips-label" }, "SOE"));
       H.sens.body.append(el("div"), el("div", { class: "chart" }), el("p", { class: "note" }));
-      const ref = card("LGD calibration reference", "Government LGD by sector from GEMs public-lending recovery data 1994–2024. Lender recovery rate is taken directly as government LGD: a high lender recovery reflects a large government backstop.");
+      const ref = card(null);
+      ref.body.appendChild(el("p", { class: "note", style: "margin-top:0" }, "Government LGD by sector from GEMs public-lending recovery data 1994–2024. Lender recovery rate is taken directly as government LGD: a high lender recovery reflects a large government backstop."));
       ref.body.appendChild(simpleTable(["Sector · GEMs source row", "Average", "P10–P90", "n"],
         Object.entries(CFG.SECTOR_RECOVERY_DATA).map(([s, d]) => [nameCell(s, d.gems_source), pct(d.average, 1), `${fmt(d.p10 * 100, 0)}–${fmt(d.p90 * 100, 0)}%`, String(d.n_defaults)]), { right: (i) => i >= 1, cls: "compact" }));
       ref.root.querySelectorAll("td.name").forEach((t) => (t.style.whiteSpace = "normal"));
       H.table = card("EFC results", null, null);
+      const refFold = fold(st.open || (st.open = {}), "lgdref", "LGD calibration reference (for reference)", [ref.root]);
+      refFold.classList.add("card", "res-fold");
       root.replaceChildren(
-        pageHead("FISCAL EXPOSURE", "Expected Fiscal Cost", "EFC = PD × EAD × LGD — PD from each SOE's own Z-EM-derived rating (20-band cohort table), EAD a share of total liabilities or the reported guaranteed debt, LGD set by you. A triage-level estimate, not a budget forecast. This is where SOEs are added up: from each SOE's actual latest accounts, not under a shock."),
+        pageHead("FISCAL EXPOSURE", "Expected Fiscal Cost", "EFC = PD × EAD × LGD — PD from each SOE's own Z-EM-derived rating (20-band cohort table), EAD a share of total liabilities, LGD set by you. A triage-level estimate, not a budget forecast. This is where SOEs are added up: from each SOE's actual latest accounts, not under a shock."),
         H.strip,
-        // settings on the left; on the right the two bar charts side by side, the LGD calibration under them; results full width below
+        // settings on the left; on the right the two bar charts side by side with the EFC results under them;
+        // the LGD calibration reference folded at the bottom (meeting 2026-10-30)
         el("div", { class: "grid" }, el("div", { class: "s4 sticky-panel" }, settings.root),
-          el("div", { class: "s8 stack" }, el("div", { class: "grid efc-pair" }, el("div", { class: "s6" }, H.bar.root), el("div", { class: "s6" }, H.sens.root)), ref.root)),
-        el("div", { class: "grid", style: "margin-top:16px" }, el("div", { class: "s12" }, H.table.root)),
-        el("div", { class: "foot" }, el("div", {}, el("b", {}, "Triage-level estimate. "), "PD is each SOE's own one-year PD from the rating cohort table — a placeholder pending probit-estimated probabilities. EAD is a proxy (a share of total liabilities) unless the data report government-guaranteed debt and that basis is selected; the table's EAD column says which each SOE used.")));
+          el("div", { class: "s8 stack" }, el("div", { class: "grid efc-pair" }, el("div", { class: "s6" }, H.bar.root), el("div", { class: "s6" }, H.sens.root)), H.table.root)),
+        el("div", { style: "margin-top:16px" }, refFold),
+        el("div", { class: "foot" }, el("div", {}, el("b", {}, "Triage-level estimate. "), "PD is each SOE's own one-year PD from the rating cohort table — a placeholder pending probit-estimated probabilities. EAD is a proxy: a share of total liabilities.")));
     },
     render() {
       const st = S.efc, H = this.H;
@@ -1805,9 +1789,13 @@
         note.textContent = `From GEMs' 10th/25th/average/90th-percentile recovery rates for ${s.r.Sector} (source row: ${d.gems_source}, n = ${d.n_defaults} defaults). High backstop intensity means the government has historically absorbed more, so EFC rises from low to high. ` +
           (isD ? "Rated D, so own PD is already the maximum and the zone-max marker is left out. " : "Zone max PD is an interim placeholder pending a dedicated maximum-PD table. ") + "A static what-if on LGD, separate from the shock module.";
       }
-      H.table.body.replaceChildren(simpleTable(["SOE", "Zone", "Z-EM", "Rating", "PD", `EAD${CUR ? " (" + CUR + ")" : ""}`, "EAD basis", "LGD", `EFC${CUR ? " (" + CUR + ")" : ""}`, ...(g ? ["EFC / GDP"] : []), "Share"],
-        res.map((x) => [nameCell(x.r.Entity, x.r.Sector), el("td", {}, zoneChip(x.r.Zone)), fmt(x.r.Z_EM, 2), x.r.Rating, pctAuto(x.PD), money(x.EAD), el("td", { class: "muted", style: "white-space:nowrap" }, eadShort(x)), x.lgd + "%", money(x.EFC), ...(g ? [pctS(x.EFC / g)] : []), pct(total ? x.EFC / total : NaN, 1)]),
-        { right: (i) => i >= 2 && i !== 3 && i !== 6, tall: res.length > 15, foot: ["Portfolio", "", "", "", "", money(sum(res.map((x) => x.EAD))), "", "", money(total), ...(g ? [pctS(total / g)] : []), "100%"] }));
+      // meeting 2026-10-30: the score and the rating are already on the Distress Indicator, so the table keeps the
+      // chance of default, the exposure, the cost as a share of GDP and each SOE's share of the portfolio
+      H.table.head.querySelector(".sub") || H.table.head.firstChild.appendChild(el("p", { class: "sub" }));
+      H.table.head.querySelector(".sub").textContent = `${st.year} · EFC = PD × EAD × LGD (LGD ${st.mode === "single" ? st.lgd + "%" : "per SOE"})` + (g ? "" : " · enter GDP under Settings to see EFC as a share of GDP");
+      H.table.body.replaceChildren(simpleTable(["SOE", "Zone", "PD", `EAD${CUR ? " (" + CUR + ")" : ""}`, "EFC / GDP", "Share of portfolio EFC"],
+        res.map((x) => [nameCell(x.r.Entity, x.r.Sector), el("td", {}, zoneChip(x.r.Zone)), pctAuto(x.PD), money(x.EAD), g ? pctS(x.EFC / g) : "—", pct(total ? x.EFC / total : NaN, 1)]),
+        { right: (i) => i >= 2, tall: res.length > 15, foot: ["Portfolio", "", "", money(sum(res.map((x) => x.EAD))), g ? pctS(total / g) : "—", "100%"] }));
     },
   };
   function backstop(box, recs, current, isD) {
@@ -1942,37 +1930,6 @@
   }
   /** waterfall (bridge) chart: a start bar, steps floating from the running total, an end bar.
    *  steps [{label, sub, v}]; opt {upBad, fmt (totals), fmtD (steps), yFmt, h} */
-  function bridge(box, start, steps, end, opt = {}) {
-    const W = widthOf(box), Hh = opt.h || 250, L = opt.L || 58, R = 10, T = 24, B = 44;
-    const bars = [{ label: opt.startLabel, sub: opt.startSub, a: 0, b: start, kind: "tot", v: start }];
-    let run = start;
-    steps.forEach((s) => { const good = s.v === 0 ? null : (s.v > 0) !== !!opt.upBad; bars.push({ label: s.label, sub: s.sub, a: run, b: run + s.v, kind: good === null ? "zero" : good ? "good" : "bad", v: s.v }); run += s.v; });
-    bars.push({ label: opt.endLabel, sub: opt.endSub, a: 0, b: end, kind: "tot2", v: end });
-    const vals = bars.flatMap((x) => [x.a, x.b]).filter(ok);
-    const sc = nice(Math.min(0, ...vals), Math.max(0, ...vals), 4);
-    const y = lin(sc.lo, sc.hi, Hh - B, T);
-    const svg = svgEl("svg", { viewBox: `0 0 ${W} ${Hh}`, width: W, height: Hh, role: "img", "aria-label": opt.aria || "Waterfall chart" });
-    for (const t of sc.ticks) { svgEl("line", { x1: L, x2: W - R, y1: y(t), y2: y(t), class: t === 0 ? "zero-l" : "grid-l" }, svg); txt(svg, L - 6, y(t), opt.yFmt ? opt.yFmt(t, sc.step) : tickLab(t, sc.step), "t-muted num", "end", 10.5); }
-    const n = bars.length, band = (W - L - R) / n, bw = Math.min(54, band * 0.62), narrow = band < 74;
-    bars.forEach((x, i) => {
-      const x0 = L + band * i + (band - bw) / 2, top = y(Math.max(x.a, x.b)), bot = y(Math.min(x.a, x.b));
-      const g = svgEl("g", { class: "row" }, svg);
-      svgEl("rect", { x: x0, y: top, width: bw, height: Math.max(1.5, bot - top), rx: 2, class: "br-" + x.kind }, g);
-      if (i < n - 1) { const yy = y(x.kind.startsWith("tot") ? x.b : x.b); svgEl("line", { x1: x0 + bw, x2: x0 + band, y1: yy, y2: yy, class: "br-conn" }, svg); }
-      const lab = x.kind.startsWith("tot") ? opt.fmt(x.v) : x.v === 0 ? "0" : (opt.fmtD || opt.fmt)(x.v);
-      const tot = x.kind.startsWith("tot"), fs = narrow ? 10 : 11.5;
-      if (x.v >= 0 || (!tot && bot + 12 > Hh - B - 2)) txt(g, x0 + bw / 2, Math.max(T - 8, top - 9), lab, "t-ink num", "middle", fs, 700);
-      else if (tot && bot - top > 20) txt(g, x0 + bw / 2, top + 11, lab, "t-on num", "middle", fs, 700); // negative total: inside the bar, under zero
-      else txt(g, x0 + bw / 2, Math.min(Hh - B - 4, bot + 10), lab, "t-ink num", "middle", fs, 700);
-      const nL = Math.max(5, Math.floor(band / 5.6));
-      txt(g, x0 + bw / 2, Hh - B + 15, clip(x.label, nL), "t-head", "middle", narrow ? 10 : 11.5, 700);
-      if (x.sub && band >= 60) txt(g, x0 + bw / 2, Hh - B + 29, clip(x.sub, nL + 2), "t-muted", "middle", 10);
-      const hit = svgEl("rect", { x: L + band * i, y: T, width: band, height: Hh - B - T, class: "hit", tabindex: 0, "aria-label": `${x.label}: ${lab}` }, g);
-      bindTip(hit, x.label + (x.sub ? " · " + x.sub : ""), [[lab, x.kind.startsWith("tot") ? "" : x.kind === "bad" ? "worse" : x.kind === "good" ? "better" : "no change"]]);
-    });
-    box.replaceChildren(svg);
-  }
-  /** ranking chart: one row per SOE, median dot and a 5th–95th percentile whisker */
   function rankChart(box, items, opt = {}) {
     const W = widthOf(box), narrow = W < 520, L = narrow ? 110 : 190, R = narrow ? 64 : 96, T = 8, B = 28, rowH = 34;
     const vals = items.flatMap((d) => [d.lo, d.hi, d.med]).filter(ok);
@@ -2029,8 +1986,9 @@
           fSlider("LGD: share the government bears", { min: CFG.LGD_SLIDER_MIN, max: CFG.LGD_SLIDER_MAX, step: 1, value: st.lgd, fmt: (v) => v + "%", info: CFG.GLOSSARY.LGD }, (v) => { st.lgd = v; this.schedule(); }),
           fSlider("EAD: share of total liabilities at stake", { min: 0.5, max: 1, step: 0.1, value: st.ead, fmt: pct0, info: "Exposure at default as a share of the projected total liabilities. 60% and 80% are the sensitivity cases; 100% counts every liability (as if the government stands behind the whole SOE)." }, (v) => { st.ead = v; this.schedule(); }),
           el("p", { class: "note", style: "margin:0" }, el("b", {}, "PD "), view === "mc" ? "in Monte Carlo comes from a smooth curve through the rating steps." : "comes from the rating step of the projected distress score (method under Advanced settings)."),
-          fold(st.open, "gdp", "Show costs as a share of GDP", [el("div", { class: "fields" }, gdpField(() => this.schedule()),
-            fSlider("Nominal GDP growth", { min: -0.05, max: 0.15, step: 0.005, value: S.growth, fmt: (v) => fmt(v * 100, 1) + "%/yr" }, (v) => { S.growth = v; this.schedule(); }))])));
+          // meeting 2026-10-30: shown directly (no drop-down), so costs are read as a share of GDP straight away
+          el("div", { class: "gdp-share" }, el("h4", { class: "gdp-share-h" }, "Show costs as a share of GDP"), el("div", { class: "fields" }, gdpField(() => this.schedule()),
+            fSlider("Nominal GDP growth", { min: -0.05, max: 0.15, step: 0.005, value: S.growth, fmt: (v) => fmt(v * 100, 1) + "%/yr" }, (v) => { S.growth = v; this.schedule(); })))));
       /* 3. the shock */
       const c3 = el("div", { class: "card panel-card shock-card" }, step(3, "Shock", "Run no shock first, then the standard stress, then one shock at a time"),
         seg([["none", "No shock"], ["standard", "Standard stress"], ["custom", "Custom shock"]], st.mode, (v) => this.setMode(v), "Shock"),
@@ -2117,7 +2075,7 @@
         return [el("div", { class: "std-list" }, [
           ["Fuel", pctSig(m.fuel_shock_pct)], ["Currency", "−" + pct0(m.fx_shock_pct)], ["Interest rates", bpsF(m.rate_shock_bps)], ["Refinancing", bpsF(m.refinancing_spread_bps)],
           ["Revenue", `${sgn(m.revenue_shock_std_devs, 1)} s.d. (${pctSig(m.revenue_shock_std_devs * sig)})`], ["Arrears", pct0(m.arrears_pct_of_revenue) + " of revenue/yr"]].map(([a, b]) => el("span", {}, a, " ", el("b", {}, b)))),
-          el("p", { class: "note" }, `All six shocks at once, for ${pl(Math.min(st.D, st.H), "year")}, at the sizes of the IMF–World Bank debt sustainability stress tests (DSA/DSF). To change one size or test one shock alone, choose Custom shock.`)];
+          el("p", { class: "note" }, `All six shocks at once, for ${pl(Math.min(st.D, st.H), "year")}, at the tool's standard stress sizes. To change one size or test one shock alone, choose Custom shock.`)];
       }
       const t = SHOCK_T[st.stype];
       const out = [fSelect("Select shock type", SHOCK_ORDER.map((id) => [id, SHOCK_T[id].label]), st.stype, (v) => { st.stype = v; rebuild(); }, { id: "sh-stype" })];
@@ -2361,24 +2319,17 @@
     buildSingle() {
       const H = this.H, st = S.sh;
       H.subsidy = el("div");
-      H.trans = card("How the shock travels", null, el("a", { class: "btn-ghost", href: "#view-how", onclick: (e) => { e.preventDefault(); goHowShock(st.mode === "custom" ? st.stype : null); } }, "Step by step →"));
-      H.trans.body.append(el("div"));
-      H.bz = card("Distress score: what moved it", "Final year, shock against no shock. Each bar is one health check, times its weight in the score."); H.bz.body.append(el("div", { class: "chart" }));
-      H.be = card("Expected fiscal cost: what moved it", "Final year, shock against no shock: a higher chance of distress, and more debt at stake."); H.be.body.append(el("div", { class: "chart" }));
+      // meeting 2026-10-30: the two paths come first (where the SOE would have been with no shock, and where it is with
+      // the shock); "How the shock travels" is folded under them. The "what moved it" bridges, the cash / State
+      // compensation section, the year-by-year tables and the payment-priority scenarios were removed from this view.
+      H.trans = card(null);
+      H.trans.body.append(el("div", { class: "btn-row", style: "justify-content:flex-end;margin-bottom:8px" },
+        el("a", { class: "btn-ghost", href: "#view-how", onclick: (e) => { e.preventDefault(); goHowShock(st.mode === "custom" ? st.stype : null); } }, "Step by step →")), el("div"));
       H.z = card("Distress score path", "Shock against the no-shock path for the same SOE"); H.z.body.append(legendRow([legendItem(LG.str, "With the shock"), legendItem(LG.base, "No shock"), legendItem(LG.act, "Shock active"), legendItem(LG.grey, "Grey zone"), legendItem(LG.dist, "Distress zone")]), el("div", { class: "chart" }));
       H.e = card("Expected fiscal cost path", null); H.e.body.append(legendRow([legendItem(LG.str, "With the shock"), legendItem(LG.base, "No shock")]), el("div", { class: "chart" }));
-      H.imp = card("Health checks, base year to final year", "Change in each ratio; weighted = change × its weight in the score");
-      H.proj = card("Full projection", null);
-      H.cash = card("Liquidity & State compensation", "Who pays for the fuel-cost change, what arrives as cash, and how the gap is funded");
-      H.wfs = card("Payment-priority scenarios and sensitivity", "The review's four scenarios on the same baseline, then the cost-recovery ratio, compliance and collection");
-      const again = () => this.render();
-      H.cashFold = fold(st.open, "r-cash", "Cash, State compensation and payment priority", [H.cash.root], again);
-      H.tblFold = fold(st.open, "r-tables", "Background data: year-by-year tables and downloads", [el("div", { class: "stack" }, H.imp.root, H.proj.root)], again);
-      H.wfsFold = fold(st.open, "r-wfs", "Payment-priority scenarios and sensitivity (Senegal case)", [H.wfs.root], again);
-      [H.cashFold, H.tblFold, H.wfsFold].forEach((d) => d.classList.add("card", "res-fold"));
-      // paths first (how the score and the cost evolve), then the final-year bridges that explain them
-      H.out.replaceChildren(H.subsidy, H.trans.root, el("div", { class: "grid" }, el("div", { class: "s6" }, H.z.root), el("div", { class: "s6" }, H.e.root)),
-        el("div", { class: "grid" }, el("div", { class: "s6" }, H.bz.root), el("div", { class: "s6" }, H.be.root)), H.cashFold, H.tblFold, H.wfsFold);
+      H.transFold = fold(st.open, "r-trans", "How the shock travels", [H.trans.root]);
+      H.transFold.classList.add("card", "res-fold");
+      H.out.replaceChildren(H.subsidy, el("div", { class: "grid" }, el("div", { class: "s6" }, H.z.root), el("div", { class: "s6" }, H.e.root)), H.transFold);
     },
     buildMacro() {
       const st = S.sh, H = this.H;
@@ -2557,121 +2508,15 @@
           : `ON · Routed cash up to ${pct0(routed)} in this scenario; unpaid waterfall bills: ${money(unpaid)}. ` +
             (routed === 0 ? "No cash is routed yet: check coverage, compliance and start year." :
              st.view === "single" && maxZDiff < 0.00001 ? "The distress score is unchanged: prioritising payments does not create new cash; check the arrears and creditor comparison." :
-             "See Cash, State compensation and payment priority for cash, arrears and creditor changes.");
+             "Its effect shows in the distress score and expected fiscal cost paths.");
         if (H.debtEffectNote) H.debtEffectNote.textContent = !debtOn
           ? "OFF · Missed debt service does not force a D rating or override single-SOE PD."
           : st.view === "mc" ? "ON · Single-SOE sensitivity only. Monte Carlo does not override its PD or sample realised defaults."
-          : debtMiss ? "ON · At least one year has missed debt service: check the chance of distress and the projection tables."
+          : debtMiss ? "ON · At least one year has missed debt service: check the chance of distress."
           : "ON but no missed debt service occurs with these assumptions; the PD and EFC therefore stay unchanged.";
       }
       if (st.view === "single") this.renderSingle(b, p, gs);
       else this.renderMC(b, p, gs);
-    },
-    renderCash(path, base, p, noWf, gs) {
-      const st = S.sh, H = this.H, f = last(path), f0 = path[0], fb = last(base);
-      const yrs = path.slice(1), tot = (k) => sum(yrs.map((r) => r[k] || 0));
-      const fuelUp = tot("Fuel Cost Change"), tariffUp = tot("Tariff Increase Revenue"), passT = tot("Tariff Pass-through");
-      const recog = tot("Direct Fuel Subsidy"), paid = tot("State Compensation Paid"), gap = tot("Cash Funding Gap"), drawn = tot("Cash Drawdown");
-      const b0 = this.base(), cashLive = ok(b0 && b0["Cash and Equivalents"]) && (p.cash_buffer_share ?? 1) > 0 && !p.legacy_loss_assets; // cash-first is in play
-      const wfOn = !!noWf, capOn = (p.borrowing_cap_debt_to_assets || 0) > 0, refiOn = (f["Refinanced Debt"] || 0) > 0;
-      const resOn = wfOn && (p.reserve_months || 0) > 0;
-      const support = tot("Emergency Support"), saved = tot("Interest Saved");
-      const custArr = path.some((r) => r["Customer Arrears"]), crrOn = (p.cost_recovery_ratio || 0) > 0;
-      const show = fuelUp !== 0 || recog !== 0 || drawn !== 0 || (p.cash_gap_short_term_share || 0) > 0 || wfOn || capOn || refiOn || custArr || crrOn; // the fuel / cash channel is in play
-      H.cash.root.hidden = !show;
-      if (!show) return;
-      const prov = tot("Compensation Provision"), unpaidEnd = f["State Compensation Receivable"];
-      const peak = path.reduce((m, r) => (r["State Compensation Receivable"] > m["State Compensation Receivable"] ? r : m), path[0]);
-      const soe = Math.max(0, fuelUp - tariffUp - passT - recog);
-      const cr = (r) => fmt(r["Current Ratio"], 2), acr = (r) => fmt(r["Adjusted Current Ratio"], 2);
-      // customer share of the allowed revenue (RMA) in the worst shock year
-      const rmaYrs = yrs.filter((r) => ok(r["Tariff Share of RMA"]) && r["Fuel Cost Change"] !== 0);
-      const rmaLow = rmaYrs.length ? rmaYrs.reduce((m, r) => (r["Tariff Share of RMA"] < m["Tariff Share of RMA"] ? r : m)) : null;
-      const fn = wfOn ? last(noWf) : null;
-      // cash waterfall: what is left unpaid, by tier
-      const rk = E.waterfallRanks(p), rule = p.shortfall_rule || "soe";
-      const tiers = WF_COLS.filter(([t, k]) => rk[t] !== undefined).filter(([t, k]) => ["ipp", "fuel", "debt", "ops"].includes(t) || path.some((r) => r[k]) || (t === "om_floor" && p.om_floor_share > 0) || (t === "junior" && p.junior_share > 0))
-        .concat(resOn ? [["reserve", "Reserve Account", "Reserve held"]] : []).sort((x, y) => rk[x[0]] - rk[y[0]]);
-      const posOf = (() => { const g = [...new Set(wfOrderItems(p).map((t) => rk[t]))].sort((x, y) => x - y); return (t) => g.indexOf(rk[t]) + 1; })();
-      const prio = (r) => (r["Arrears to Statutory and Operator"] || 0) + (r["Arrears to IPPs"] || 0) + (r["Arrears to Fuel Suppliers"] || 0) + (r["Missed Debt Service"] || 0);
-      const arrTot = (r) => WF_COLS.reduce((a, [, k]) => a + (r[k] || 0), 0);
-      const statePayT = tot("State Shortfall Payment"), lateT = tot("Late-payment Interest"), dft = path.find((r) => r["Debt Default"] > 0);
-      const routed = path.slice(1).map((r) => r["Waterfall Routed Share"] || 0), partial = wfOn && routed.some((v) => v < 1);
-      const unpaidT = tot("Unpaid Under Waterfall"), underT = tot("Underfunded Operations");
-      const pkArr = path.reduce((m, r) => (arrTot(r) > arrTot(m) ? r : m), path[0]);
-      const pkPrio = path.reduce((m, r) => (prio(r) > prio(m) ? r : m), path[0]);
-      const tiles = el("div", { class: "grid4 sm" },
-        tile("State compensation recognised", recog > 0 ? "watch" : null, recog > 0 ? "Obligation" : null, money(recog), CUR, "booked as SOE revenue over the projection"),
-        tile("Paid in cash by the budget", null, null, money(paid), CUR, (recog > 0 ? `${pct0(p.comp_paid_share ?? 1)} in the year it is due, the rest later` : "—") + (crrOn ? ` · includes the change in tariff-gap compensation (${money(tot("Tariff Gap Compensation Change"))} recognised)` : "")),
-        tile("Peak unpaid State compensation", peak["State Compensation Receivable"] > 0 ? "alert" : "ok", peak["State Compensation Receivable"] > 0 ? "Arrears" : "None", money(peak["State Compensation Receivable"]), CUR,
-          `${peak["Calendar Year"]} · ${money(unpaidEnd)} still unpaid in ${f["Calendar Year"]}` + (prov ? ` · ${money(prov)} written off` : "")),
-        cashLive ? tile("Cash drawn down", drawn > 0 ? "watch" : "ok", drawn > 0 ? "Used" : "None", money(drawn), CUR,
-          `cash ${money(f0.Cash)} in ${f0["Calendar Year"]} → ${money(f.Cash)} in ${f["Calendar Year"]}` + ((p.cash_floor_opex_share || 0) > 0 ? ` · floor ${money(p.cash_floor_opex_share * b0["Operating Expense"])}` : "")) : null,
-        wfOn ? tile("Left unpaid under the waterfall", unpaidT > 0 ? "alert" : "ok", unpaidT > 0 ? "Arrears" : "None", money(unpaidT), CUR,
-            (cashLive ? "shortfall after the cash drawn · " : "") + (partial ? `${money(gap)} borrowed on the cash not routed` : "nothing borrowed") + ` · peak arrears ${money(arrTot(pkArr))} in ${pkArr["Calendar Year"]}`)
-          : tile(cashLive ? "Borrowed after cash" : "Cash funding gap", gap > 0 ? "watch" : "ok", gap > 0 ? "Borrowed" : "None", money(gap), CUR, (cashLive ? "shortfall left after the cash drawn · " : "") + `new short-term debt ${money(f["New Short-term Debt"])} · supplier arrears ${money(f["Supplier Arrears"])} · interest ${money(tot("Interest on New Debt"))}`),
-        wfOn ? tile("SOE's own operations underfunded", underT > 0 ? "alert" : "ok", underT > 0 ? "Underfunded" : "Funded", money(underT), CUR,
-          (rule === "state" ? "the State pays the shortfall instead" : `its own costs left unpaid so that the ranks above are paid${(p.om_floor_share || 0) > 0 ? ` · O&M floor ${money(f["Arrears on O&M Floor"])} unpaid at the end` : ""}`) + " · the waterfall creates no cash: closing this takes tariffs or State payments") : null,
-        wfOn ? tile("Priority creditors unpaid", prio(pkPrio) > 0 ? "alert" : "ok", prio(pkPrio) > 0 ? "Arrears" : "Paid in full", money(prio(pkPrio)), CUR,
-          prio(pkPrio) > 0 ? `peak in ${pkPrio["Calendar Year"]}: IPPs ${money(pkPrio["Arrears to IPPs"])} · fuel ${money(pkPrio["Arrears to Fuel Suppliers"])} · debt service ${money(pkPrio["Missed Debt Service"])}` + (pkPrio["Arrears to Statutory and Operator"] ? ` · taxes and operator ${money(pkPrio["Arrears to Statutory and Operator"])}` : "") : "taxes, IPPs, fuel and debt service paid in full every year") : null,
-        wfOn && rule === "state" ? tile("State pays the waterfall's shortfall", statePayT > 0 ? "alert" : "ok", statePayT > 0 ? "Budget cost" : "None", money(statePayT), CUR,
-          "a budget transfer into equity, so no tier goes unpaid · a direct fiscal cost on top of EFC" + (gs && statePayT > 0 ? ` · ${pctS(statePayT / gs[1])} of year-1 GDP` : "")) : null,
-        wfOn ? (() => {
-          const miss = path.find((r) => r["Missed Debt Service"] > 0), treated = (p.default_on_missed_debt ?? 0) > 0;
-          if (!miss) return tile("Debt service unpaid", "ok", "Paid", "None", "", "debt service paid in full every year");
-          if (dft) return tile("Debt service unpaid", "alert", "Rating override", String(dft["Calendar Year"]), "", `rated D in ${dft["Calendar Year"]} · PD ${pctAuto(dft.PD)} · ${money(dft["Missed Debt Service"])} unpaid`);
-          return tile("Debt service unpaid", "alert", "Unpaid", String(miss["Calendar Year"]), "", `${money(miss["Missed Debt Service"])} unpaid · ${treated ? "sensitivity rule active" : "not automatically treated as a default"} · PD follows the selected model`);
-        })() : null,
-        partial ? tile("Cash routed through the waterfall", null, null, pct0(last(routed)), "", path.slice(1).map((r, i) => `${r["Calendar Year"]} ${pct0(routed[i])}`).join(" · ") + " · coverage × compliance × ramp-up; the rest is handled as without the waterfall") : null,
-        lateT ? tile("Late-payment interest", "watch", "Cost", money(lateT), CUR, "on arrears left unpaid, over the horizon · in interest expense") : null,
-        custArr ? tile("Customer arrears", f["Customer Arrears"] > 0 ? "watch" : null, null, money(f["Customer Arrears"]), CUR, `unpaid customer bills at the end of ${f["Calendar Year"]} · public administrations collect ${pct0(p.collect_public ?? 1)}`) : null,
-        crrOn ? tile("Tariff gap: change in State compensation", null, null, money(tot("Tariff Gap Compensation Change")), CUR, `cost recovery set to ${pct0(p.cost_recovery_ratio)} · State covers ${pct0(p.tariff_gap_state_share ?? 1)} of the change`) : null,
-        resOn ? tile("Reserve account", tot("Reserve Draw") > 0 ? "watch" : "ok", tot("Reserve Draw") > 0 ? "Drawn" : "Held", money(f["Reserve Account"]), CUR,
-          `target ${fmt(p.reserve_months, 0)} months of IPP payments and debt service · drawn ${money(tot("Reserve Draw"))} over the horizon · held outside current assets`) : null,
-        tile("Current ratio", f["Current Ratio"] < f0["Current Ratio"] ? "watch" : null, null, cr(f), "", `from ${cr(f0)} · adjusted for illiquid State, VAT and customer claims: ${acr(f)}`),
-        tile("Debt to assets", f["Debt to Assets"] > fb["Debt to Assets"] ? "watch" : null, null, fmt(f["Debt to Assets"], 2), "", `no shock ${fmt(fb["Debt to Assets"], 2)}` + (capOn ? ` · cap ${fmt(p.borrowing_cap_debt_to_assets, 2)}` : "")),
-        rmaLow ? tile("Customers' share of the RMA", rmaLow["Tariff Share of RMA"] < f0["Tariff Share of RMA"] ? "watch" : null, null, pct(rmaLow["Tariff Share of RMA"], 1), "",
-          `${rmaLow["Calendar Year"]}, lowest shock year · ${pct(f0["Tariff Share of RMA"], 1)} in ${f0["Calendar Year"]} · revenue less grants (plus tariff increase and pass-through) / revenue + fuel-cost change`) : null,
-        refiOn ? tile("Short-term debt refinanced", saved >= 0 ? "ok" : "watch", saved >= 0 ? "Refinanced" : "Costs more", money(f["Refinanced Debt"]), CUR,
-          `${fmt((p.short_term_debt_rate || 0) * 100, 1)}% overdrafts → ${fmt((p.refinance_long_term_rate || 0) * 100, 1)}% long-term · interest saved ${money(saved)} over the horizon`) : null,
-        wfOn ? tile(`Z-EM in ${f["Calendar Year"]}: with vs without waterfall`, null, null, sgn(f.Z_EM - fn.Z_EM, 2), "",
-          `${fmt(fn.Z_EM, 2)} (${fn.Rating}) without → ${fmt(f.Z_EM, 2)} (${f.Rating}) with · EFC ${money(fn.EFC)} → ${money(f.EFC)} · ` +
-          "the gap is a current liability either way; the difference comes from interest (on borrowing without, late-payment interest with), a default on missed debt service, and supplier or State responses") : null,
-        capOn ? tile("Emergency government support", support > 0 ? "alert" : "ok", support > 0 ? "Injection" : "None", money(support), CUR,
-          support > 0 ? `capital injected once debt/assets reaches ${fmt(p.borrowing_cap_debt_to_assets, 2)}` + (gs ? ` · ${pctS(support / gs[1])} of year-1 GDP` : "") + " — a budget cost on top of EFC" : `debt/assets stays below the ${fmt(p.borrowing_cap_debt_to_assets, 2)} cap`) : null);
-      const split = [
-        ["Customers", "tariff ↑", tariffUp], ["Customers", "pass-through", passT],
-        ...(crrOn ? [["State", "recognised", recog]] : [["State", "paid", paid], ["State", "unpaid", unpaidEnd + prov]]), ["SOE", "absorbs", soe],
-      ].filter((r) => Math.abs(r[2]) > 0);
-      const chart = el("div", { class: "chart" });
-      const hasRma = ok(f0["Tariff Share of RMA"]);
-      const yrRows = path.map((r, i) => [String(r["Calendar Year"]) + (i === 0 ? " base" : ""), money(r["Fuel Cost Change"]), money(r["Tariff Increase Revenue"]), money(r["Direct Fuel Subsidy"]), money(r["State Compensation Paid"]),
-        money(r["State Compensation Receivable"]), ...(cashLive ? [money(r["Cash Drawdown"]), money(r.Cash)] : []),
-        ...(wfOn ? [money(r["Unpaid Under Waterfall"]), money(r["Underfunded Operations"]), ...(resOn ? [money(r["Reserve Account"])] : []), ...(partial ? [money(r["Cash Funding Gap"])] : [])] : [money(r["Cash Funding Gap"]), money(r["New Short-term Debt"]), money(r["Interest on New Debt"])]),
-        ...(refiOn ? [money(r["Interest Saved"])] : []), ...(capOn ? [money(r["Emergency Support"])] : []), money(r["Net Income"]), cr(r), acr(r), fmt(r["Debt to Assets"], 2), ...(hasRma ? [pct(r["Tariff Share of RMA"], 1)] : [])]);
-      // with vs without the cash waterfall, year by year
-      const efcK = gs ? "EFC_GDP" : "EFC", efcF = (v) => (gs ? pctS(v) : money(v));
-      const wfBlock = wfOn ? el("div", { style: "margin-top:16px" },
-        el("h3", { style: "font-size:13.5px;margin-bottom:6px" }, "Cash waterfall: who is left unpaid (end of year)"),
-        simpleTable(["Year", ...tiers.map(([t, , l]) => `${posOf(t)} ${l}`), "Total arrears", ...(rule === "state" ? ["State pays"] : []), ...(lateT ? ["Late interest"] : [])],
-          path.map((r, i) => [String(r["Calendar Year"]) + (i === 0 ? " base" : ""), ...tiers.map(([, k]) => money(r[k])), money(arrTot(r)), ...(rule === "state" ? [money(r["State Shortfall Payment"])] : []), ...(lateT ? [money(r["Late-payment Interest"])] : [])]),
-          { right: (i) => i >= 1, cls: "compact" }),
-        el("p", { class: "note" }, `Order: ${CFG.WATERFALL_ORDERS[p.waterfall_order]?.label || CFG.WATERFALL_ORDERS.senelec_note.label}. Same number = pari passu, shared pro rata to the year's bills. A shortfall on the routed cash is left unpaid from the lowest rank up (the reserve is drawn before the ranks above it go unpaid)${rule === "state" ? "; with the State rule, the State pays it instead" : ""}; a later surplus pays arrears from the top rank down, then tops up the reserve. Arrears are current liabilities and carry the late-payment interest set on the Cash & financing tab.`),
-        el("h3", { style: "font-size:13.5px;margin:14px 0 6px" }, "The same scenario with and without the waterfall"),
-        simpleTable(["Year", "Z-EM without", "Z-EM with", "Rating without → with", "Current liabilities without", "with", "Current ratio without", "with", gs ? "EFC / GDP without" : "EFC without", "with"],
-          path.map((r, i) => { const q = noWf[i]; return [String(r["Calendar Year"]) + (i === 0 ? " base" : ""), fmt(q.Z_EM, 2), fmt(r.Z_EM, 2), `${q.Rating} → ${r.Rating}`, money(q["Current Liabilities"]), money(r["Current Liabilities"]), cr(q), cr(r), efcF(q[efcK]), efcF(r[efcK])]; }),
-          { right: (i) => i >= 1 && i !== 3, cls: "compact" }),
-        el("p", { class: "note" }, "Without the waterfall the cash gap is borrowed as set on the Cash & financing tab; with it the routed share is not borrowed and stays as unpaid bills. Both are current liabilities, so the waterfall moves the shortfall between creditors rather than closing it: Z-EM and EFC change little unless tariffs, State payments or supplier terms change. What does move them: late-payment interest versus the interest on borrowing, a default when debt service goes unpaid (rated D), a State that pays the shortfall, and refinancing that waits for a rating. Refinancing, if set, applies in both columns.")) : null;
-      H.cash.body.replaceChildren(tiles,
-        el("div", { class: "grid", style: "margin-top:16px" },
-          el("div", { class: "s5" }, el("h3", { style: "font-size:13.5px;margin-bottom:6px" }, `Who pays the fuel-cost change (${money(fuelUp, true)})`), chart),
-          el("div", { class: "s7" }, el("p", { class: "note", style: "margin-top:0" }, "Net income stays close to the no-shock path because recognised compensation counts as revenue, but only the in-year paid share arrives as cash; the receivable is funded from the SOE's own cash first, where the file reports it, and then by borrowing. Paying from cash lowers current assets, so working capital (X1) falls, whereas long-term borrowing leaves it unchanged. When the current ratio starts below 1, adding the receivable to current assets and the new debt to current liabilities can even lift the reported ratio. The adjusted ratio leaves out the State receivable and trapped VAT, and shows the liquidity squeeze."))),
-        el("div", { style: "margin-top:12px" }, simpleTable(["Year", "Fuel cost Δ", "Tariff ↑", "State recognised", "State paid", "Receivable", ...(cashLive ? ["Cash drawn", "Cash"] : []),
-          ...(wfOn ? ["Left unpaid", "Own ops unpaid", ...(resOn ? ["Reserve"] : []), ...(partial ? ["Borrowed (not routed)"] : [])] : [cashLive ? "Borrowed" : "Cash gap", "New ST debt", "New interest"]),
-          ...(refiOn ? ["Interest saved"] : []), ...(capOn ? ["Emergency support"] : []), "Net income", "Current ratio", "Adjusted", "Debt / assets", ...(hasRma ? ["Customers' share of RMA"] : [])], yrRows, { right: (i) => i >= 1, cls: "compact" })),
-        wfBlock);
-      if (!split.length) { chart.append(el("p", { class: "note" }, "No fuel-cost change in this scenario.")); return; }
-      hbars(chart, split.map(([who, what, v]) => ({ label: who, sub: what, v, cls: "bar" + (who === "SOE" || what === "unpaid" ? " neg" : ""), lab: money(v), tipTitle: `${who} — ${what}`, tip: [[money(v, true), fuelUp ? `${pct0(v / fuelUp)} of the fuel-cost change` : ""]] })), { L: 120, R: 80, nTicks: 4, tick: (t, s) => moneyTick(t, s) });
     },
     renderSingle(b, p, gs) {
       const st = S.sh, H = this.H;
@@ -2714,21 +2559,9 @@
         [`Distress score, ${f["Calendar Year"]}`, `${fmt(f.Z_EM, 2)} · ${f.Zone}`, "vs no shock", dTxt(f.Z_EM - fb.Z_EM, (v) => fmt(v, 2), false)],
         [`Expected fiscal cost, ${f["Calendar Year"]}`, money(f.EFC, true), `PD ${pctAuto(f.PD)} · vs no shock`, dTxt(f.EFC - fb.EFC, money, true)],
       ];
-      put(H.trans.body.firstChild, el("ol", { class: "trans" }, steps.map(([t, v, s0, d], i) => el("li", { class: "trans-step" + (i === 0 ? " is-shock" : "") + (d ? " d-" + d[1] : "") },
+      put(H.trans.body.lastChild, el("ol", { class: "trans" }, steps.map(([t, v, s0, d], i) => el("li", { class: "trans-step" + (i === 0 ? " is-shock" : "") + (d ? " d-" + d[1] : "") },
           el("span", { class: "trans-t" }, t), el("b", { class: "trans-v num" }, v), el("span", { class: "trans-d num" }, d ? d[0] : s0), d ? el("span", { class: "trans-s" }, s0) : null))),
         el("p", { class: "note" }, shockOn ? `Read left to right: the shock changes ${st.soe}'s accounts, the gap is borrowed, the health checks weaken and the expected fiscal cost moves. Every number is compared with the same SOE's no-shock path.` : "No shock is set: this is the no-shock path. Choose Standard stress or a Custom shock in step 3."));
-      // bridges: what moved the score, and what moved the cost
-      bridge(H.bz.body.firstChild, fb.Z_EM, ["X1", "X2", "X3", "X4"].map((k) => ({ label: HEALTH_S[k], sub: `${k} ×${CFG.ZEM_COEFFICIENTS[k]}`, v: (f[k] - fb[k]) * CFG.ZEM_COEFFICIENTS[k] })), f.Z_EM,
-        { startLabel: "No shock", startSub: String(fb["Calendar Year"]), endLabel: "Shock", endSub: f.Zone, fmt: (v) => fmt(v, 2), fmtD: (v) => sgn(v, 2), aria: "Distress score bridge from no shock to the shock, by health check" });
-      const pdEff = (f.PD - fb.PD) * fb.EAD * f.LGD, eadEff = f.PD * (f.EAD - fb.EAD) * f.LGD;
-      bridge(H.be.body.firstChild, fb.EFC, [{ label: "Chance (PD)", sub: `${pctAuto(fb.PD)} → ${pctAuto(f.PD)}`, v: pdEff }, { label: "Debt (EAD)", sub: `${money(fb.EAD)} → ${money(f.EAD)}`, v: eadEff }], f.EFC,
-        { upBad: true, startLabel: "No shock", startSub: String(fb["Calendar Year"]), endLabel: "Shock", endSub: CUR || "", fmt: (v) => money(v), fmtD: (v) => (v > 0 ? "+" : "−") + money(Math.abs(v)), yFmt: (t, s2) => moneyTick(t, s2), L: 62, aria: "Expected fiscal cost bridge: effect of the chance of distress and of the debt at stake" });
-      const wfP = Object.assign({}, p, { waterfall_on: 0 });
-      const noWf = (p.waterfall_on || 0) > 0 && !p.legacy_loss_assets ? E.costPath(E.runScenario(b, wfP, st.H), st.lgd, gs, st.ead, wfP) : null;
-      this.renderCash(path, base, p, noWf, gs);
-      H.cashFold.hidden = H.cash.root.hidden;
-      H.cash.root.hidden = false;
-      if (H.wfsFold.open || (p.waterfall_on || 0) > 0) this.renderScenarios(b, p, gs);
       const xs = path.map((r) => r["Calendar Year"]);
       const tipRows = (i) => [[fmt(path[i].Z_EM, 2), `with the shock · ${path[i].Rating} · ${path[i].Zone}`], [fmt(base[i].Z_EM, 2), `no shock · ${base[i].Rating}`], [money(path[i].EFC), `EFC with the shock (no shock ${money(base[i].EFC)})`]];
       lines(H.z.body.lastChild, xs, [{ vals: base.map((r) => r.Z_EM), cls: "ln-base", dot: "prev", skipFirstDot: true, label: "No shock" }, { vals: path.map((r) => r.Z_EM), cls: "ln-str", dot: "now", label: "With the shock" }],
@@ -2738,86 +2571,6 @@
       const yF = useG ? (t) => pctS(t) : (t, s) => moneyTick(t, s);
       lines(H.e.body.lastChild, xs, [{ vals: base.map((r) => r[key]), cls: "ln-base", dot: "prev", skipFirstDot: true, label: "No shock" }, { vals: path.map((r) => r[key]), cls: "ln-str", dot: "now", label: "With the shock" }],
         { zeroFloor: true, yFmt: yF, L: 62, xLab: (i) => (i === 0 ? `${xs[i]} base` : String(xs[i])), tipTitle: (i) => `${st.soe} · ${xs[i]}`, tip: (i) => [[useG ? pctS(path[i][key]) : money(path[i][key]), `with the shock · PD ${pctAuto(path[i].PD)}`], [useG ? pctS(base[i][key]) : money(base[i][key]), "no shock"]], endLabel: { series: 1, fmt: (v) => (useG ? pctS(v) : money(v)) } });
-      const imp = E.kpiImpact(path), impB = E.kpiImpact(base);
-      H.imp.body.replaceChildren(simpleTable(["Health check", "Base", "Final", "Weighted Δ score", "vs no shock"],
-        imp.map((r, i) => [el("td", { title: r.Component, style: "white-space:nowrap" }, el("b", {}, r.key), " ", el("span", { class: "muted" }, HEALTH[r.key])), fmt(r.base, 3), fmt(r.final, 3), sgn(r.weighted, 2), sgn(r.weighted - impB[i].weighted, 2)]), { right: (i) => i >= 1, cls: "compact" }),
-        el("p", { class: "note" }, "Weighted Δ = (final − base ratio) × weight. “vs no shock” measures the same against the no-shock path's final year, which isolates the effect of the shock itself."));
-      const heads = ["Year", "EBIT", "Equity", "Liabilities", "Distress score", "No shock", "Zone", "Rating", "PD", "EFC", ...(hasSub ? ["State compensation"] : []), ...(gs ? ["EFC / GDP"] : [])];
-      H.proj.body.replaceChildren(simpleTable(heads, path.map((r, i) => [String(r["Calendar Year"]) + (i === 0 ? " base" : ""), money(r.EBIT), money(r.Equity), money(r["Total Liabilities"]), fmt(r.Z_EM, 2), fmt(base[i].Z_EM, 2), el("td", {}, zoneChip(r.Zone)), r.Rating, pctAuto(r.PD), money(r.EFC), ...(hasSub ? [money(r["Direct Fuel Subsidy"])] : []), ...(gs ? [pctS(r.EFC_GDP)] : [])]), { right: (i) => i >= 1 && i !== 6 && i !== 7, cls: "compact" }),
-        el("div", { style: "margin-top:10px" }, dataButtons(() => toCSV(["Calendar Year", "EBIT", "Interest Expense", "Retained Earnings", "Equity", "Total Liabilities", "Total Assets", "Current Assets", "X1", "X2", "X3", "X4", "Z_EM", "Z_EM_no_shock", "Zone", "Rating", "PD", "EAD", "EFC", "Direct Fuel Subsidy", "GDP", "EFC_GDP", "Current Liabilities", "Net Income", "Fuel Cost Change", "Tariff Increase Revenue", "State Compensation Paid", "State Compensation Receivable", "Compensation Provision", "Trapped VAT Credits", "Cash Funding Gap", "Cash Drawdown", "New Short-term Debt", "Supplier Arrears", "New Long-term Debt", "Cash", "Interest on New Debt", "Current Ratio", "Adjusted Current Ratio", "Debt to Assets", "Refinanced Debt", "Interest Saved", "Emergency Support", "Cumulative Emergency Support", "Tariff Share of RMA",
-          "Unpaid Under Waterfall", "Underfunded Operations", "Arrears to IPPs", "Arrears to Fuel Suppliers", "Missed Debt Service", "Arrears on Own Operations", "Reserve Account", "Reserve Draw", "Reserve Top-up",
-          ...CSV_V2],
-          path.map((r, i) => [r["Calendar Year"], r.EBIT, r["Interest Expense"], r["Retained Earnings"], r.Equity, r["Total Liabilities"], r["Total Assets"], r["Current Assets"], r.X1, r.X2, r.X3, r.X4, r.Z_EM, base[i].Z_EM, r.Zone, r.Rating, r.PD, r.EAD, r.EFC, r["Direct Fuel Subsidy"], r.GDP, r.EFC_GDP, r["Current Liabilities"], r["Net Income"], r["Fuel Cost Change"], r["Tariff Increase Revenue"], r["State Compensation Paid"], r["State Compensation Receivable"], r["Compensation Provision"], r["Trapped VAT Credits"], r["Cash Funding Gap"], r["Cash Drawdown"], r["New Short-term Debt"], r["Supplier Arrears"], r["New Long-term Debt"], r.Cash, r["Interest on New Debt"], r["Current Ratio"], r["Adjusted Current Ratio"], r["Debt to Assets"], r["Refinanced Debt"], r["Interest Saved"], r["Emergency Support"], r["Cumulative Emergency Support"], r["Tariff Share of RMA"],
-          r["Unpaid Under Waterfall"], r["Underfunded Operations"], r["Arrears to IPPs"], r["Arrears to Fuel Suppliers"], r["Missed Debt Service"], r["Arrears on Own Operations"], r["Reserve Account"], r["Reserve Draw"], r["Reserve Top-up"],
-          ...CSV_V2.map((k) => r[k])])), `scenario_${st.soe}.csv`)));
-    },
-    /** the review's four scenarios on the same baseline, and sensitivity to cost recovery, compliance and collection */
-    renderScenarios(b, p, gs) {
-      const st = S.sh, H = this.H, Hh = st.H;
-      const run = (q) => E.costPath(E.runScenario(b, q, Hh), st.lgd, gs, st.ead, q);
-      const shockOn = MAGS.some((k) => (k === "fuel_shock_path" ? (st.mags[k] || []).some((v) => v !== 0) : (st.mags[k] || 0) !== 0));
-      const oil = CFG.OIL_SHOCK_PRESET;
-      const p0 = this.params(ZERO_MAG);
-      const pShock = shockOn ? p : this.params(Object.assign({}, ZERO_MAG, { fuel_shock_pct: oil.fuel_shock_pct, fuel_shock_path: oil.fuel_shock_path.slice() }));
-      const SC = CFG.WATERFALL_SCENARIOS;
-      const rows = Object.entries(SC).map(([k, sc]) => {
-        const q = Object.assign({}, sc.oil_shock ? pShock : p0, sc.set);
-        return { k, sc, q, path: run(q) };
-      });
-      const x1 = (r) => r.X1, arr = (r) => WF_COLS.reduce((a, [, c]) => a + (r[c] || 0), 0);
-      const wfSet = (q, o) => Object.assign({}, q, { waterfall_on: 1 }, o);
-      // the year the tables look at: the panel scenario's peak arrears under the waterfall, else its largest fuel-cost change, else the last year
-      const ref = run(wfSet(p, {}));
-      const pick = (f) => ref.reduce((bi, r, i) => (Math.abs(f(r)) > Math.abs(f(ref[bi])) ? i : bi), 0);
-      let tf = pick(arr);
-      if (!arr(ref[tf])) tf = pick((r) => r["Fuel Cost Change"] || 0);
-      if (!tf) tf = ref.length - 1;
-      const at = (path) => path[tf];
-      const sq = at(rows[0].path), yF = sq["Calendar Year"], yL = last(ref)["Calendar Year"];
-      const efcK = gs ? "EFC_GDP" : "EFC", efcF = (v) => (gs ? pctS(v) : money(v));
-      const load = (x) => {
-        Object.assign(st.expo, x.sc.set);
-        if (x.sc.oil_shock && !shockOn) { Object.assign(st.mags, ZERO_MAG, { fuel_shock_pct: oil.fuel_shock_pct, fuel_shock_path: oil.fuel_shock_path.slice() }); st.H = Math.min(7, Math.max(st.H, 3)); }
-        else if (!x.sc.oil_shock) Object.assign(st.mags, ZERO_MAG, { fuel_shock_path: [] });
-        if (x.sc.oil_shock) { st.mode = "custom"; st.stype = "fuel"; } else st.mode = "none";
-        rebuild();
-      };
-      const anyState = rows.some((x) => at(x.path)["Cumulative State Shortfall Payment"]), anyDft = rows.some((x) => x.path.some((r) => r["Debt Default"] > 0));
-      const anyMiss = rows.some((x) => at(x.path)["Missed Debt Service"] > 0);
-      const t1 = simpleTable(["Scenario", `Z-EM ${yF}`, "vs 1", ...(yL !== yF ? [`Z-EM ${yL}`] : []), "X1", "Current ratio", "Arrears", "of which SOE", ...(anyMiss ? ["Debt service unpaid"] : []), ...(anyState ? ["State pays"] : []), ...(anyDft ? ["Default"] : []), "Cumulative PD", gs ? "EFC / GDP" : "EFC"],
-        rows.map((x, i) => {
-          const f = at(x.path), dft = x.path.find((r) => r["Debt Default"] > 0);
-          return [el("td", { style: "min-width:190px" }, el("b", {}, `${i + 1} `), x.sc.short, x.sc.oil_shock ? el("div", { class: "muted", style: "font-size:11.5px" }, shockOn ? "the shock set on the panel" : "oil price path " + oil.fuel_shock_path.filter((v) => v).map(pctSig).join(" / ")) : null),
-            `${fmt(f.Z_EM, 2)} (${f.Rating})`, i ? sgn(f.Z_EM - sq.Z_EM, 2) : "—", ...(yL !== yF ? [`${fmt(last(x.path).Z_EM, 2)} (${last(x.path).Rating})`] : []), fmt(x1(f), 3), fmt(f["Current Ratio"], 2), money(arr(f)), money((f["Arrears on Own Operations"] || 0) + (f["Arrears on O&M Floor"] || 0)),
-            ...(anyMiss ? [money(f["Missed Debt Service"])] : []), ...(anyState ? [money(f["Cumulative State Shortfall Payment"])] : []), ...(anyDft ? [dft ? String(dft["Calendar Year"]) : "—"] : []), pctAuto(E.cumulativePd(x.path.slice(1).map((r) => r.PD))), efcF(f[efcK])];
-        }), { right: (i) => i >= 1, cls: "compact" });
-      const loadRow = el("div", { class: "presets", style: "margin:10px 0 0" }, el("span", { class: "chips-label" }, "Load into the panel:"),
-        ...rows.map((x, i) => el("button", { class: "btn-ghost", type: "button", onclick: () => load(x), title: x.sc.label }, `${i + 1} ${x.sc.short}`)));
-      // cost-recovery ratio × compliance, on the panel's scenario
-      const crrs = [0.85, 0.9, 0.95, 1, 1.05, 1.1], comps = [0.6, 0.8, 1];
-      const t2 = simpleTable(["Cost recovery", "Z-EM without waterfall", ...comps.map((c) => `with, ${pct0(c)} compliance`), "Δ Z-EM (100%)", "Δ X1 (100%)", "Arrears (100%)"],
-        crrs.map((c) => {
-          const w0 = at(run(Object.assign({}, p, { waterfall_on: 0, cost_recovery_ratio: c })));
-          const ws = comps.map((m) => at(run(wfSet(p, { cost_recovery_ratio: c, waterfall_compliance: m }))));
-          const w1 = ws[ws.length - 1];
-          return [pct0(c), fmt(w0.Z_EM, 2), ...ws.map((w) => `${fmt(w.Z_EM, 2)}${w["Debt Default"] > 0 ? " · default" : ""}`), sgn(w1.Z_EM - w0.Z_EM, 2), sgn(x1(w1) - x1(w0), 3), money(arr(w1))];
-        }), { right: (i) => i >= 1, cls: "compact" });
-      // collection rate of public administrations
-      const cols = [0.4, 0.6, 0.8, 1];
-      const t3 = simpleTable(["Public administrations collect", "Z-EM without waterfall", "with waterfall", "Adjusted current ratio", "Customer arrears", "Arrears under the waterfall"],
-        cols.map((c) => {
-          const w0 = at(run(Object.assign({}, p, { waterfall_on: 0, collect_public: c }))), w1 = at(run(wfSet(p, { collect_public: c })));
-          return [pct0(c), fmt(w0.Z_EM, 2), `${fmt(w1.Z_EM, 2)}${w1["Debt Default"] > 0 ? " · default" : ""}`, fmt(w1["Adjusted Current Ratio"], 2), money(w1["Customer Arrears"]), money(arr(w1))];
-        }), { right: (i) => i >= 1, cls: "compact" });
-      H.wfs.body.replaceChildren(
-        el("p", { class: "note", style: "margin-top:0" }, `Values for ${yF}, the year of ${arr(ref[tf]) ? "the largest arrears" : "the largest fuel-cost change"} in the panel's scenario under the waterfall${yL !== yF ? ` (and Z-EM in ${yL})` : ""}. Same SOE, base year and exposures as the panel. Scenarios 1 to 3 have no shock; 4 adds ${shockOn ? "the shock set on the panel" : "the oil price path"}. Scenario 1 turns the waterfall off; 2 and 3 set the cost-recovery ratio and compliance; every other waterfall setting (order, shortfall rule, floor, late interest, behaviour) is the panel's.`),
-        t1, loadRow,
-        el("h3", { style: "font-size:13.5px;margin:16px 0 6px" }, `Sensitivity: cost-recovery ratio and compliance (${yF}, the panel's scenario${shockOn ? ", with its shock" : ""})`),
-        t2,
-        el("h3", { style: "font-size:13.5px;margin:16px 0 6px" }, `Sensitivity: collection rate of public administrations (${yF})`),
-        t3,
-        el("p", { class: "note" }, "Customer arrears are current assets and the bills left unpaid to fund them are current liabilities, so when the current ratio is below 1 weaker collection can even lift X1 and Z-EM; the adjusted current ratio leaves the arrears out and shows the squeeze."),
-        el("p", { class: "note" }, "The review expects the waterfall to improve X1 and liquidity mainly when the tariff gap is small, and Z-EM to barely move when it is large. Here the waterfall creates no cash: differences between the columns come from late-payment versus borrowing interest, a default when debt service goes unpaid, supplier and State responses, and rating-dependent refinancing. Whether the State receivable counts in current assets (Tariffs & collections tab) can move X1 more than the waterfall."));
     },
     renderMC(b, p, gs) {
       const st = S.sh, m = st.mc, H = this.H;
@@ -3141,7 +2894,7 @@
       H.rules = card("Trigger rules by issue", "Each rule, the follow-up it calls for, and the SOEs that fire it");
       H.strip = statStrip();
       root.replaceChildren(
-        pageHead("EARLY WARNING", "Trigger rules and follow-up", `Rules that link an SOE's financial health to a pre-agreed response, evaluated on the latest year of each SOE shown. The stress rule uses the standard stress (DSA/DSF convention) over ${CFG.MC_HORIZON_YEARS} years.`),
+        pageHead("EARLY WARNING", "Trigger rules and follow-up", `Rules that link an SOE's financial health to a pre-agreed response, evaluated on the latest year of each SOE shown. The stress rule uses the tool's standard stress over ${CFG.MC_HORIZON_YEARS} years.`),
         H.strip,
         el("div", { class: "grid" }, el("div", { class: "s5" }, H.board.root), el("div", { class: "s7" }, H.plan.root), el("div", { class: "s12" }, H.rules.root)),
         el("div", { class: "foot" }, el("div", {}, "Rules, cut-offs and actions are illustrative starting points (config.TRIGGER_RULES). The follow-up steps reflect common SOE-oversight practice and still need to be agreed with the Ministry of Finance and aligned with World Bank, IMF and governance-team guidance before use.")));
@@ -3203,220 +2956,6 @@
           el("div", {}, el("b", { style: "font-size:12px;color:var(--ink-2)" }, "Follow-up"), el("ol", {}, (q.steps || [q.action]).map((t) => el("li", {}, t)))))));
       }));
       const tbl = H.rules.body.querySelector("table"); if (tbl) tbl.id = "rulesTable";
-    },
-  };
-
-  /* =====================================================================
-     REPORT — five sections, regenerated from the data on screen
-     ===================================================================== */
-  function dumbbell(box, items) {
-    const W = widthOf(box), narrow = W < 520, L = narrow ? 84 : 130, R = 16, T = 20, rowH = 32;
-    const vals = items.flatMap((s) => [s.a, s.b]).filter(ok);
-    const sc = nice(Math.min(0, ...vals), Math.max(CFG.Z_SAFE_CUTOFF + 0.4, ...vals), W < 420 ? 4 : 5);
-    const x = lin(sc.lo, sc.hi, L, W - R);
-    const H = T + items.length * rowH + 26, pb = T + items.length * rowH;
-    const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H });
-    shadeZones(svg, sc, x, true, T, pb);
-    for (const t of sc.ticks) { svgEl("line", { x1: x(t), x2: x(t), y1: T, y2: pb, class: t === 0 ? "zero-l" : "grid-l" }, svg); txt(svg, x(t), pb + 14, tickLab(t, sc.step), "t-muted num", "middle", 11); }
-    items.forEach((s, i) => {
-      const cy = T + i * rowH + rowH / 2, row = svgEl("g", { class: "row" }, svg);
-      txt(row, 0, cy, clip(s.name, narrow ? 11 : 18), "t-head", "start", 12, 700);
-      if (ok(s.a) && ok(s.b)) {
-        svgEl("line", { x1: x(s.a), x2: x(s.b), y1: cy, y2: cy, class: "conn" }, row);
-        if (s.ay !== s.by) svgEl("circle", { cx: x(s.a), cy, r: 4.5, class: "dot-prev" }, row);
-        svgEl("circle", { cx: x(s.b), cy, r: 5, class: "dot-now" }, row);
-        const right = s.b >= s.a, lx = x(s.b) + (right ? 9 : -9);
-        if ((!right && lx - L < 34) || (right && lx > W - R - 30)) txt(row, x(s.b), cy - 12, fmt(s.b, 1), "t-ink num", "middle", 11.5, 600);
-        else txt(row, lx, cy, fmt(s.b, 1), "t-ink num", right ? "start" : "end", 11.5, 600);
-      }
-      const hit = svgEl("rect", { x: 0, y: cy - rowH / 2, width: W, height: rowH, class: "hit", tabindex: 0, "aria-label": `${s.name} from ${fmt(s.a, 2)} to ${fmt(s.b, 2)}` }, row);
-      bindTip(hit, `${s.name} · ${s.sector}`, [[fmt(s.b, 2), `Z″ ${s.by} · ${s.br}`], [fmt(s.a, 2), `Z″ ${s.ay} · ${s.ar}`], [sgn(s.b - s.a, 2), "change"]]);
-    });
-    box.replaceChildren(svg);
-  }
-  const CHANNELS = () => [["combined", "Combined (all channels)", STD_MAG], ...Object.entries(CFG.REPORT_STRESS_CHANNELS).map(([k, [label, mag]]) => [k, label, Object.assign({}, ZERO_MAG, { [mag]: STD_MAG[mag] })])];
-  const magText = (mag, v) => (mag === "rate_shock_bps" || mag === "refinancing_spread_bps" ? `${sgn(v, 0)} bps` : mag === "revenue_shock_std_devs" ? `${sgn(v, 1)} s.d.` : mag === "arrears_pct_of_revenue" ? `${fmt(v * 100, 0)}% of revenue a year` : `${sgn(v * 100, 0)}%`);
-  function caveats() {
-    const c = CFG.ZEM_COEFFICIENTS, st = S.efc;
-    const items = [
-      `Z″ = ${c.X1}·X1 + ${c.X2}·X2 + ${c.X3}·X3 + ${c.X4}·X4, with no constant (Eidelman convention); zone cutoffs ${CFG.Z_DISTRESS_CUTOFF} and ${CFG.Z_SAFE_CUTOFF} and the 20-band rating table are calibrated to the same constant-free score.`,
-      "Ratings are a mechanical mapping of Z″ on a standalone basis, not agency ratings. PD is the one-year PD of each SOE's rating band from the cohort table (a placeholder pending probit-estimated probabilities).",
-      `EFC = PD × EAD × LGD. EAD is ${st.basis === "guaranteed_debt" ? `reported government-guaranteed debt where available, otherwise ${pct0(st.ead)} of total liabilities` : `${pct0(st.ead)} of total liabilities (a proxy; 60% and 80% are the sensitivity cases)`}. LGD is ${fmt(st.lgd, 0)}%${st.mode === "per" ? " unless set per SOE" : " for every SOE"}; the GEMs sector references take the lender recovery rate as government LGD, a working assumption.`,
-      "For SOEs with large government transfers, the unadjusted Z″ is more likely to overstate than understate health. Read it with the fiscal-dependency KPIs.",
-      `Stress test: shocks act on statement lines through each SOE's own exposures (sector or generic defaults where the data carry none) and roll forward over ${CFG.MC_HORIZON_YEARS} years; each SOE is compared with its own no-shock path. Tax and current liabilities are held flat, losses are debt-financed, and net income carries the reported figure plus the shock effect.`,
-      "KPI cutoffs, EFC/GDP bands and trigger rules are illustrative starting points, not calibrated to a country sample. Suppressed ratios (negative equity or EBITDA) count as alerts.",
-    ];
-    if (S.gdp) items.push(`GDP entered by the user (${money(S.gdp, true)}) and projected forward at ${fmt(S.growth * 100, 1)}% a year for the stress-test EFC/GDP path.`);
-    if (S.example) items.push(`The data are ${S.label.toLowerCase().startsWith("illustrative") || S.label.toLowerCase().startsWith("built-in") ? "the tool's invented example portfolio" : "example data"}, not real SOEs.`);
-    return items;
-  }
-  pages.report = {
-    build(root) {
-      const H = (this.H = {});
-      const SECS = [["exec", "Executive summary"], ["perf", "Financial performance"], ["risk", "Distress and fiscal risk"], ["stress", "Stress tests"], ["policy", "Policy implications"]];
-      const printBtn = canDownload ? el("button", { class: "btn primary no-print", type: "button", onclick: () => window.print(), title: "Export all five sections of this Report; select Save as PDF in your browser’s print dialog." }, "Print / save full report as PDF") : null;
-      const toc = el("nav", { class: "rep-toc no-print", "aria-label": "Report sections" }, SECS.map(([id, t], i) => el("a", { href: "#view-report", onclick: (e) => { e.preventDefault(); const n = document.getElementById("rep-" + id); if (n) n.scrollIntoView({ behavior: "smooth", block: "start" }); } }, el("b", { class: "num" }, String(i + 1)), t)));
-      H.sec = {};
-      const secs = SECS.map(([id, title], i) => {
-        const lead = el("p", { class: "rep-lead" }), body = el("div", { class: "stack" });
-        H.sec[id] = { lead, body };
-        return el("section", { class: "rep-sec", id: "rep-" + id, "aria-labelledby": "rep-h-" + id }, el("div", { class: "rep-head" }, el("span", { class: "rep-num num" }, String(i + 1)), el("div", {}, el("h2", { id: "rep-h-" + id }, title), lead)), body);
-      });
-      H.gen = el("p", { class: "rep-gen" });
-      H.strip = statStrip();
-      root.replaceChildren(pageHead("AUTOMATED REPORT", M.title || "SOE Fiscal Risk Report",
-        "Five sections generated from the data loaded in this page. Every number is recomputed when you load other data or change LGD, EAD or GDP on the Expected Fiscal Cost tab; the text is rule-based, not written by a person. Use Print / save full report as PDF to export all five sections.", printBtn), H.strip, toc, ...secs, H.gen);
-    },
-    render() {
-      const H = this.H, st = S.rep, rows = latestOf(allRows()), n = rows.length;
-      const byZ = rows.slice().sort((a, b) => a.Z_EM - b.Z_EM);
-      const efcOf = (r) => E.efcRow(r, S.efc.mode === "per" ? S.efc.per[r.Entity] ?? S.efc.lgd : S.efc.lgd, S.efc.ead, S.efc.basis);
-      const chan = CHANNELS().map(([key, label, mags]) => {
-        const res = standardStress(allRows(), mags);
-        const eB = sum(res.map((x) => last(x.base).EFC)), eS = sum(res.map((x) => last(x.str).EFC));
-        return { key, label, mags, res, eB, eS, drops: res.filter((x) => x.drop).map((x) => x.row.Entity), by: Object.fromEntries(res.map((x) => [x.row.Entity, x])) };
-      });
-      const comb = chan[0];
-      const { hits, by } = evalTriggers(byZ, comb.by);
-      const lastY = CFG.MC_HORIZON_YEARS;
-      const moreBtn = () => moreToggle(n, st.all, (v) => { st.all = v; this.render(); });
-      const horizonYear = comb.res.length ? last(comb.res[0].str)["Calendar Year"] : "";
-
-      /* 1. executive summary */
-      const ex = H.sec.exec;
-      ex.lead.textContent = `${S.label} · ${pl(n, "SOE")} in ${pl(S.sectors.length, "sector")} · statements ${S.years[0]}–${last(S.years)} · latest year of each SOE.`;
-      const hero = el("div", { class: "card s5 hero" }), tiles = el("div", { class: "s7 tiles" });
-      const ov = overviewBlocks(hero, tiles, comb.res);
-      const efcRows = rows.map((r) => ({ r, e: efcOf(r).EFC })).sort((a, b) => (b.e || 0) - (a.e || 0));
-      const total = sum(efcRows.map((x) => x.e)), top3 = sum(efcRows.slice(0, 3).map((x) => x.e));
-      const worstCh = chan.slice(1).map((c) => ({ c, up: c.eB ? c.eS / c.eB - 1 : NaN })).sort((a, b) => (b.up || 0) - (a.up || 0))[0];
-      const nAlert = byZ.filter((r) => by[r.Entity].level === "alert").length, nWatch = byZ.filter((r) => by[r.Entity].level === "watch").length;
-      const names = (a, k = 5) => (a.length > k ? a.slice(0, k).join(", ") + ` and ${a.length - k} more` : a.join(", "));
-      const distressNames = byZ.filter((r) => r.Zone === "Distress").map((r) => r.Entity);
-      const msgs = [
-        [`${ov.zc.Distress} of ${pl(n, "SOE")} are in the distress zone and ${ov.zc.Grey} in the grey zone`, distressNames.length ? ` (distress: ${names(distressNames)}).` : "."],
-        [`Expected fiscal cost is ${money(total, true)}`, (S.gdp ? `, ${pctS(total / S.gdp)} of GDP` : "") + (efcRows[0] && total ? `; ${efcRows[0].r.Entity} alone accounts for ${Math.round((efcRows[0].e / total) * 100)}%` + (n > 3 ? ` and the three largest exposures for ${Math.round((top3 / total) * 100)}%.` : ".") : ".")],
-        [`Under the standard stress, ${pl(comb.drops.length, "SOE")} drop at least one zone`, (comb.drops.length ? ` (${names(comb.drops)})` : "") + ` and portfolio EFC ${comb.eB ? (comb.eS >= comb.eB ? "rises " : "falls ") + fmt(Math.abs(comb.eS / comb.eB - 1) * 100, 0) + "%" : "changes"} by ${horizonYear}` + (worstCh && ok(worstCh.up) && worstCh.up > 0 ? `; the costliest single channel is ${/^[A-Z]{2,}$/.test(worstCh.c.label) ? worstCh.c.label : worstCh.c.label.toLowerCase()} (+${fmt(worstCh.up * 100, 0)}%).` : ".")],
-        ov.worst && ov.worst.dz < 0 ? [`Fastest deterioration: ${ov.worst.r.Entity}`, `, Z″ ${fmt(ov.worst.f.Z_EM, 2)} in ${ov.worst.f.Year} to ${fmt(ov.worst.r.Z_EM, 2)} in ${ov.worst.r.Year} (${ov.worst.f.Rating} to ${ov.worst.r.Rating}).`] : ["No SOE's Z″ fell", " between its first and latest year."],
-        [`${pl(nAlert, "SOE")} trigger at least one alert rule and ${nWatch} are on watch`, " — the pre-agreed actions are in section 5."],
-      ];
-      const dq = S.rows.filter((r) => /proxy|estimate|unaudit/i.test(`${r["Data Quality Flag"] || ""} ${r["Audit Status"] || ""}`)).length;
-      const ph = CFG.PARAMETER_REGISTER.filter((r) => r.status === "placeholder").length;
-      msgs.push([`Data and assumptions: `, (dq ? `${dq} of ${S.rows.length} SOE-year rows are flagged as proxy, estimated or unaudited; ` : S.rows.some((r) => r["Data Quality Flag"] || r["Audit Status"]) ? "no rows are flagged as proxy or unaudited; " : "the file carries no provenance flags; ") + `${ph} of ${CFG.PARAMETER_REGISTER.length} model parameters are still placeholders that need a source.`]);
-      hero.className = "card s5 hero";
-      ex.body.replaceChildren(el("div", { class: "grid" }, el("div", { class: "s7" }, el("div", { class: "card keymsg", style: "height:100%" }, el("h3", {}, "Key messages"), el("ul", {}, msgs.map(([b, t]) => el("li", {}, el("b", {}, b), t))))), hero));
-      let efcSt = null;
-      if (S.gdp) { const gg = total / S.gdp; efcSt = gg >= CFG.REPORT_EFC_GDP_ALERT ? "alert" : gg >= CFG.REPORT_EFC_GDP_WATCH ? "watch" : "ok"; }
-      const upPct = comb.eB ? (comb.eS / comb.eB - 1) * 100 : NaN;
-      put(H.strip,
-        countTile("SOEs in distress", ov.zc.Distress, n, `${ov.zc.Grey} more in the grey zone · latest year`),
-        tile("Expected fiscal cost", efcSt, efcSt ? STLABEL[efcSt] : null, money(total), CUR, S.gdp ? `${pctS(total / S.gdp)} of GDP · LGD ${fmt(S.efc.lgd, 0)}%` : `PD × EAD × LGD · LGD ${fmt(S.efc.lgd, 0)}%`),
-        countTile("Drop a zone under stress", comb.drops.length, n, `standard stress, by ${horizonYear}`),
-        tile("EFC under standard stress", ok(upPct) && upPct > 0 ? "watch" : "ok", ok(upPct) && upPct > 0 ? "Rises" : "Flat", (ok(upPct) ? sgn(upPct, 0) : "—") + "%", "", `${money(comb.eB)} → ${money(comb.eS)} ${CUR}`.trim()),
-        countTile("Alert-level SOEs", nAlert, n, `${nWatch} more on watch · section 5`));
-
-      /* 2. financial performance */
-      const pf = H.sec.perf;
-      pf.lead.textContent = "How the portfolio's distress score has moved over time, and the headline ratios of each SOE in its latest year.";
-      const blocks = [];
-      if (S.years.length > 1) {
-        const ys = S.years, med = [], p25 = [], p75 = [], nd = [], cnt = [];
-        ys.forEach((y) => { const z = S.en.filter((r) => r.Year === y).map((r) => r.Z_EM).filter(ok); cnt.push(z.length); med.push(E.quantile(z, 0.5)); p25.push(E.quantile(z, 0.25)); p75.push(E.quantile(z, 0.75)); nd.push(S.en.filter((r) => r.Year === y && r.Zone === "Distress").length); });
-        const c = card("Portfolio Z″ over time", "Median and middle half (25th–75th percentile) of Z″ across the SOEs reporting each year");
-        const box = el("div", { class: "chart" });
-        c.body.append(legendRow([legendItem(LG.med, "Median"), legendItem(LG.inner, "25th–75th percentile"), legendItem(LG.grey, "Grey zone"), legendItem(LG.dist, "Distress")]), box);
-        blocks.push(c.root);
-        this.pending = () => lines(box, ys, [{ vals: med, cls: "ln-med", dot: "now", label: "Median" }], { band: [{ lo: p25, hi: p75, cls: "band-inner" }], zones: true, h: 240, tipTitle: (i) => String(ys[i]), tip: (i) => [[fmt(med[i], 2), "median Z″"], [`${fmt(p25[i], 2)} to ${fmt(p75[i], 2)}`, "middle half"], [`${nd[i]} of ${cnt[i]}`, "SOEs in distress"]], endLabel: { series: 0, fmt: (v) => fmt(v, 2) } });
-        const i0 = 0, i1 = ys.length - 1;
-        c.body.append(el("p", { class: "note" }, `Median Z″ ${med[i1] >= med[i0] ? "rose" : "fell"} from ${fmt(med[i0], 2)} in ${ys[i0]} to ${fmt(med[i1], 2)} in ${ys[i1]}; SOEs in distress went from ${nd[i0]} of ${cnt[i0]} to ${nd[i1]} of ${cnt[i1]}.` + (uniq(cnt).length > 1 ? " The number of SOEs reporting changes over the period, so part of the movement is composition." : "")));
-      } else this.pending = null;
-      const avail = E.availableKpis(S.en), keys = CFG.REPORT_HEADLINE_KPIS.filter((k) => avail.includes(k));
-      if (keys.length) {
-        const sc = scorecard(S.en, avail, keys, st.all);
-        const freq = keys.map((k) => [k, sc.scored.filter((x) => x.stt[k].st === "alert").length]).filter((x) => x[1]).sort((a, b) => b[1] - a[1]).slice(0, 3);
-        const c = card("KPI scorecard — headline ratios", `Latest year per SOE · SOEs with the most alerts first${n > LIMIT && !st.all ? ` · the ${LIMIT} with most alerts of ${n}` : ""}`);
-        c.body.append(sc.table, el("div", { class: "btn-row no-print", style: "margin-top:8px" }, moreToggle(n, st.all, (v) => { st.all = v; this.render(); }, `Show the ${LIMIT} with most alerts only`)), sc.legend,
-          el("p", { class: "note" }, freq.length ? `Most frequent alerts: ${freq.map(([k, c2]) => `${SPEC[k].label} (${pl(c2, "SOE")})`).join(", ")}.` : "No headline ratio is in the alert range."));
-        blocks.push(c.root);
-      }
-      pf.body.replaceChildren(...blocks);
-
-      /* 3. distress and fiscal risk */
-      const rk = H.sec.risk;
-      rk.lead.textContent = `Where each SOE sits on the Altman Z″-EM scale, how far it has moved since its first year, and what it could cost the budget (PD × EAD × LGD at LGD ${fmt(S.efc.lgd, 0)}%).`;
-      const zc = card("Z″ score by SOE", `Latest year · weakest first${n > LIMIT && !st.all ? ` · ${LIMIT} of ${n}` : ""}`), zbox = el("div", { class: "chart" });
-      zc.body.append(zbox);
-      const dc = card("Change since the first year", "First year (grey dot) to latest year (dark dot), same order"), dbox = el("div", { class: "chart" });
-      const fallers = rows.map((r) => [r, E.notchChange(S.en, r.Entity)]).filter(([, nc]) => nc[2] !== null && nc[2] <= -CFG.DYNAMIC_CAP_TRIGGER_NOTCHES);
-      dc.body.append(legendRow([legendItem(LG.prev, "First year"), legendItem(LG.now, "Latest year")]), dbox,
-        el("p", { class: "note" }, fallers.length ? el("span", {}, `Rating down ${CFG.DYNAMIC_CAP_TRIGGER_NOTCHES} notches or more: `, el("b", {}, names(fallers.sort((a, b) => a[1][2] - b[1][2]).map(([r, nc]) => `${r.Entity} (${nc[0]} to ${nc[1]})`), 6)), ". Once an SOE starts to slide, the fall tends to be fast, which leaves little time to act.") : `No SOE's indicative rating fell by ${CFG.DYNAMIC_CAP_TRIGGER_NOTCHES} notches or more over the period.`));
-      const ec = card("Expected fiscal cost by SOE", `Latest year · largest first · ${S.gdp ? "labels show share of GDP" : "labels show share of portfolio EFC"}`), ebox = el("div", { class: "chart" });
-      const conc = efcRows[0] && total ? `The largest exposure, ${efcRows[0].r.Entity}, is ${Math.round((efcRows[0].e / total) * 100)}% of the portfolio's ${money(total, true)}` + (n > 3 ? `; the top three are ${Math.round((top3 / total) * 100)}%.` : ".") : "";
-      let band = "";
-      if (S.gdp) { const g = total / S.gdp; band = ` At ${pctS(g)} of GDP the portfolio is ${g >= CFG.REPORT_EFC_GDP_ALERT ? "above the alert band" : g >= CFG.REPORT_EFC_GDP_WATCH ? "in the watch band" : "below the watch band"} (watch from ${pct(CFG.REPORT_EFC_GDP_WATCH, 1)}, alert from ${pct(CFG.REPORT_EFC_GDP_ALERT, 1)}, illustrative).`; }
-      ec.body.append(ebox, el("p", { class: "note" }, conc + band));
-      put(rk.body, el("div", { class: "grid" }, el("div", { class: "s6" }, zc.root), el("div", { class: "s6" }, dc.root), el("div", { class: "s12" }, ec.root)), n > LIMIT ? el("div", { class: "btn-row no-print" }, moreBtn()) : null);
-      const zShown = clipRows(byZ, st.all);
-      hbars(zbox, zShown.map((r) => ({ label: r.Entity, sub: r.Sector, v: r.Z_EM, lab: `${fmt(r.Z_EM, 2)} · ${r.Rating}`, tipTitle: `${r.Entity} · ${r.Sector}`, tip: [[fmt(r.Z_EM, 2), `Z″ (${r.Year})`], [ZLABEL[zk(r.Zone)] || r.Zone, "zone"], [r.Rating, `rating · PD ${pctAuto(E.pdByRating(r.Rating))}`]] })), { shade: true, max: CFG.Z_SAFE_CUTOFF + 0.4, L: 130 });
-      const first = new Map(); byYearAsc(S.en).forEach((r) => { if (!first.has(r.Entity)) first.set(r.Entity, r); });
-      dumbbell(dbox, zShown.map((r) => { const f = first.get(r.Entity); return { name: r.Entity, sector: r.Sector, a: f.Z_EM, b: r.Z_EM, ay: f.Year, by: r.Year, ar: f.Rating, br: r.Rating }; }));
-      hbars(ebox, clipRows(efcRows, st.all).map((x) => { const e = efcOf(x.r); return { label: x.r.Entity, sub: `${x.r.Rating} · PD ${pctAuto(e.PD)}`, v: ok(x.e) ? x.e * SC : null, cls: "bar", lab: `${money(x.e)} · ${S.gdp ? pctS(x.e / S.gdp) : pct(total ? x.e / total : NaN, 0)}`, tipTitle: `${x.r.Entity} · ${x.r.Sector}`, tip: [[money(x.e, true), "expected fiscal cost"], [money(e.EAD, true), e.EAD_source]] }; }), { tick: (t, s2) => moneyTick(t / SC, s2 / SC), nTicks: 4 });
-
-      /* 4. stress tests */
-      const sx = H.sec.stress, m = STD_MAG, D = Math.min(CFG.DEFAULT_SHOCK_PARAMS.shock_duration_years, lastY);
-      sx.lead.textContent = `Standard stress in the DSA/DSF convention: fuel ${magText("fuel_shock_pct", m.fuel_shock_pct)}, FX ${magText("fx_shock_pct", m.fx_shock_pct)}, interest rate ${magText("rate_shock_bps", m.rate_shock_bps)}, revenue ${magText("revenue_shock_std_devs", m.revenue_shock_std_devs)}, refinancing ${magText("refinancing_spread_bps", m.refinancing_spread_bps)}, arrears ${magText("arrears_pct_of_revenue", m.arrears_pct_of_revenue)}. Shocks act for ${D} of ${lastY} projection years through each SOE's own exposures; debt and equity built up meanwhile carry forward.`;
-      const ct = el("table", { class: "compact" });
-      ct.appendChild(el("thead", {}, el("tr", {}, ["Scenario", "Shock", "SOEs dropping a zone", `EFC no shock, ${horizonYear}`, "EFC stressed", "Change"].map((h, i) => el("th", { class: i >= 2 ? "r" : "" }, h)))));
-      ct.appendChild(el("tbody", {}, chan.map((c) => {
-        const mag = c.key === "combined" ? null : CFG.REPORT_STRESS_CHANNELS[c.key][1];
-        const tr = el("tr", { class: "pick" + (c.key === st.scen ? " sel" : ""), tabindex: "0" }, el("td", {}, el("b", {}, c.label)), el("td", { class: "muted" }, mag ? magText(mag, m[mag]) : "all six at once"),
-          el("td", { class: "r" }, c.drops.length ? stChip("alert", String(c.drops.length)) : stChip("none", "0")), el("td", { class: "r" }, money(c.eB)), el("td", { class: "r" }, money(c.eS)),
-          el("td", { class: "r" }, c.eB ? sgn((c.eS / c.eB - 1) * 100, 0) + "%" : "—"));
-        const pick = () => { st.scen = c.key; this.render(); };
-        tr.addEventListener("click", pick); tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
-        return tr;
-      })));
-      const cc = card("Stress by channel", "Each channel alone, then all together · select a row to chart it below");
-      cc.body.append(el("div", { class: "tbl-wrap" }, ct), el("p", { class: "note" }, "Channels do not add up to the combined scenario: losses compound through the balance sheet, and the rating-band PD steps are not linear."));
-      const cur = chan.find((c) => c.key === st.scen) || comb;
-      const gap = (x) => last(x.str).Z_EM - last(x.base).Z_EM;
-      if (!S.names.includes(st.soe) || !cur.by[st.soe]) st.soe = (cur.res.find((x) => x.drop) || cur.res.slice().sort((a, b) => gap(a) - gap(b))[0] || {}).row?.Entity;
-      const x = cur.by[st.soe];
-      const pc = card(`Z″ path against the no-shock path · ${cur.label}`, x ? x.desc : "", fSelect(null, byZ.map((r) => r.Entity), st.soe, (v) => { st.soe = v; this.render(); }));
-      const pbox = el("div", { class: "chart" });
-      pc.body.append(legendRow([legendItem(LG.str, "Stressed"), legendItem(LG.base, "No shock"), legendItem(LG.act, "Shock active"), legendItem(LG.grey, "Grey zone"), legendItem(LG.dist, "Distress")]), pbox);
-      const rc = card(x ? `${st.soe} in ${last(x.str)["Calendar Year"]}` : "Result", `${cur.label} · year ${lastY} of the projection`);
-      if (x) {
-        const b = last(x.base), r = last(x.str);
-        const resBox = el("div", { class: "results" }, [["No shock", "base", b], ["Stressed", "stress", r]].map(([h, cls, v]) => el("div", { class: "res " + cls }, el("div", { class: "res-h" }, h), el("div", { class: "res-z" }, el("b", {}, fmt(v.Z_EM, 2)), zoneChip(v.Zone)),
-          el("div", { class: "res-line" }, "Rating ", el("b", {}, `${v.Rating} · PD ${pctAuto(v.PD)}`)), el("div", { class: "res-line" }, "EFC ", el("b", {}, money(v.EFC, true) + (S.gdp ? ` · ${pctS(v.EFC_GDP)} of GDP` : ""))))));
-        const dz = r.Z_EM - b.Z_EM, de = (r.EFC || 0) - (b.EFC || 0);
-        const delta = el("div", { class: "delta" + (x.drop ? " hot" : "") }, "Stress moves Z″ by ", el("b", {}, sgn(dz, 2)), " and EFC by ", el("b", {}, (de >= 0 ? "+" : "") + money(de, true) + (b.EFC ? ` (${sgn((de / b.EFC) * 100, 0)}%)` : "")), x.drop ? " · drops a zone below the no-shock path, so the stress trigger applies." : " against the no-shock path.");
-        const drv = E.ZCOMP.map((k) => (r[k] - b[k]) * CFG.ZEM_COEFFICIENTS[k]);
-        rc.body.append(resBox, delta, el("div", { class: "lbl", style: "margin-bottom:6px" }, "What moves the score — weighted change, stressed minus no shock"), tracks(E.ZCOMP.map((k) => `${CFG.ZEM_COEFFICIENTS[k]} × ${SHORT[k]}`), drv));
-      }
-      sx.body.replaceChildren(cc.root, el("div", { class: "grid" }, el("div", { class: "s7" }, pc.root), el("div", { class: "s5" }, rc.root)));
-      if (x) {
-        const xs = x.str.map((q) => q["Calendar Year"]);
-        lines(pbox, xs, [{ vals: x.base.map((q) => q.Z_EM), cls: "ln-base", dot: "prev", skipFirstDot: true, label: "No shock" }, { vals: x.str.map((q) => q.Z_EM), cls: "ln-str", dot: "now", label: "Stressed" }],
-          { zones: true, active: [1, D], xLab: (i) => (i === 0 ? `${xs[i]} base` : String(xs[i])), tipTitle: (i) => `${st.soe} · ${xs[i]}`, tip: (i) => [[fmt(x.str[i].Z_EM, 2), `stressed · ${x.str[i].Rating}`], [fmt(x.base[i].Z_EM, 2), `no shock · ${x.base[i].Rating}`], [money(x.str[i].EFC), "EFC stressed"]], endLabel: { series: 1, fmt: (v) => fmt(v, 2) } });
-      }
-
-      /* 5. policy implications */
-      const po = H.sec.policy;
-      po.lead.textContent = "Example rules that link each SOE's financial health to a pre-agreed fiscal response, the SOEs that trigger them, and what the numbers rest on.";
-      const fired = CFG.TRIGGER_RULES.filter((r) => hits[r.id].length && r.id !== "routine");
-      const rt = card("Triggered rules and pre-agreed actions", fired.length ? "Most severe first · actions are examples, to be agreed with the ministry" : null);
-      rt.body.append(fired.length ? simpleTable(["Signal", "Condition", "Pre-agreed action (example)", "SOEs"], fired.map((r) => [el("td", {}, stChip(r.level)), r.condition, r.action, el("td", {}, el("div", { class: "soe-list" }, hits[r.id].map((nm) => el("span", {}, nm))))]), { cls: "rules" }) : el("p", { class: "note" }, "No SOE triggers an alert or watch rule; routine annual monitoring applies."));
-      const bd = card("Signal board", "Each SOE under the most severe rule it triggers");
-      bd.body.append(signalBoard(byZ.slice().reverse(), by));
-      const cv = card("Sources and caveats");
-      const cnts = Object.keys(CFG.PARAMETER_STATUS_LABELS).map((k) => [k, CFG.PARAMETER_REGISTER.filter((r) => r.status === k).length]);
-      cv.body.append(el("ul", { class: "caveats" }, caveats().map((t) => el("li", {}, t))),
-        el("p", { class: "note" }, "Parameter register: ", cnts.map(([k, c2], i) => [i ? " · " : "", el("b", {}, String(c2)), " " + CFG.PARAMETER_STATUS_LABELS[k].toLowerCase()]), ". Each is listed with its source in the ", go("assumptions", "Technical notes"), "."));
-      po.body.replaceChildren(rt.root, bd.root, cv.root);
-      H.gen.textContent = `Generated in this page on ${new Date().toISOString().slice(0, 10)} from ${S.label}. SOE Fiscal Risk Tool — HTML version.`;
-      if (this.pending) this.pending();
     },
   };
 
