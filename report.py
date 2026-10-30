@@ -57,7 +57,7 @@ import training_data
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 # the training workbook participants download from the start screen, next to the Excel practice data
-WORKBOOK_DOCX = Path(__file__).resolve().parent / "training_material" / "SOE_Training_Workbook.docx"
+WORKBOOK_DOCX = Path(__file__).resolve().parent / "training_material" / "WB_KDIS_SOE_Training_Workbook.docx"
 
 # --------------------------------------------------------------------------
 # payloads for the interactive app (config numbers + raw statement rows)

@@ -3,7 +3,7 @@
 자세한 내용은 `docs/CHANGES-2026-10-30-meeting.md`. 모델 공식·기본값은 바꾸지 않았고 `tests/` 검사가 모두 통과합니다. 사이트 주소는 그대로입니다.
 
 - **상단 제목**: "SOE FISCAL RISK TOOL"을 밝은 하늘색으로.
-- **Home**: "About this tool..." → "About this tool". 연습 파일 줄에서 **Excel 데이터(.xlsx)**와 **워크북(Word)**을 받습니다(CSV 버튼 대신). Word 파일은 `training_material/SOE_Training_Workbook.docx`.
+- **Home**: "About this tool..." → "About this tool". 연습 파일 줄에서 **Excel 데이터(.xlsx)**와 **워크북(Word)**을 받습니다(CSV 버튼 대신). Word 파일은 `training_material/WB_KDIS_SOE_Training_Workbook.docx`.
 - **KPI Dashboard**: Fiscal dependency에서 Effective tax rate 제거(알림 개수 기준 15개), "Reported vs tariff-compensation-adjusted EBIT margin" 그래프 숨김.
 - **Distress Indicator**: 상단 지표가 아래에서 고른 SOE 기준으로 바뀜 — 부실 여부, 부실 점수(기간 중앙값 포함), 그림자 신용등급, 부도확률(PD). Portfolio view에서는 같은 4개를 포트폴리오 기준으로.
 - **Expected Fiscal Cost**: EFC results 표를 그래프 바로 아래로 올리고 Z-EM·Rating·EAD basis·LGD·EFC(FCFA) 열 제거. LGD calibration reference는 맨 아래 접기. EAD의 Guaranteed debt 선택 제거.
